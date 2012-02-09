@@ -1,0 +1,119 @@
+Texture2D inTex;
+Texture1DArray inDepths;
+SamplerState Sampler;
+
+struct PS_IN
+{
+    float4 pos : SV_POSITION;
+	float2 tex : TEXCOORD0;
+};
+
+struct PS_OUT
+{
+	float4 color : SV_TARGET;
+};
+
+PS_OUT ImageToCasterPS(PS_IN input)
+{
+	PS_OUT output;
+	output.color = inTex.Sample(Sampler,input.tex);
+	clip(output.color.a<0.1?-1:1);
+	
+	output.color = 1;
+	return output;
+}
+
+PS_OUT CasterToDistancePS(PS_IN input)
+{
+	PS_OUT output;
+
+	float inCol = inTex.Sample(Sampler,input.tex).a;
+	float distance = 1-(inCol>0.1?length(input.tex - 0.5):1);
+
+	output.color =	float4(distance,distance,distance,1);
+	return output;
+}
+
+PS_OUT DistanceToDistortPS(PS_IN input)
+{
+	PS_OUT output;
+	
+	float u0 = input.tex.x * 2 - 1;
+	float v0 = input.tex.y * 2 - 1;
+	
+	u0 = u0 * abs(v0);
+	u0 = (u0+1)/2;
+	
+	float2 coord = float2(u0,input.tex.y);
+	
+	float h = inTex.Sample(Sampler,coord).r;
+	float v = inTex.Sample(Sampler,coord.yx).r;
+	
+	output.color = float4(h,v,0,1);
+	return output;
+}
+
+float DistortHToDepthPS(PS_IN input) : SV_Depth
+{
+	float depth = 1-inTex.Sample(Sampler,input.tex).r;
+	return depth;
+}
+
+float DistortVToDepthPS(PS_IN input) : SV_Depth
+{
+	float depth = 1-inTex.Sample(Sampler,input.tex).g;
+	return depth;
+}
+
+PS_OUT ShadowMapPS(PS_IN input)
+{
+	PS_OUT output;
+	
+	float distance = length(input.tex - 0.5);
+	
+	//which depth map to use to get the distance?
+	float x = input.tex.x * 2 - 1;
+	float y = input.tex.y * 2 - 1;
+	
+	float shadowMapDistance=1.0;
+	if (abs(x)<abs(y))
+	{
+		float u = input.tex.y;
+ 		float v = input.tex.x;
+ 
+		u = abs(u-0.5f) * 2;
+ 		v = v * 2 - 1;
+ 		float v0 = v/u;
+ 		v0 = (v0 + 1) / 2;
+
+		float image=0;
+		if (input.tex.y>0.5)
+		{
+			image = 1;
+		}
+		shadowMapDistance = inDepths.Sample(Sampler,float2(v0,image)).r;
+	}
+	else
+	{
+		float u = input.tex.x;
+ 		float v = input.tex.y;
+
+		u = abs(u-0.5f) * 2;
+ 		v = v * 2 - 1;
+ 		float v0 = v/u;
+ 		v0 = (v0 + 1) / 2;
+		
+		float image=2;
+		if (input.tex.x>0.5)
+		{
+			image = 3;
+		}
+		shadowMapDistance = inDepths.Sample(Sampler,float2(v0,image)).r;
+	}
+	
+	float light = distance < shadowMapDistance?1:0;
+	
+	light = light * 1-distance*2;
+	output.color = float4(light,light,light,light);
+	return output;
+}

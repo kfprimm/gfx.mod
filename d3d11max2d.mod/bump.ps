@@ -1,0 +1,58 @@
+cbuffer CMax2DFlags
+{
+	float4 inColor;
+	float4 inTexFlags;
+};
+
+cbuffer LightBuffer
+{
+	float4 diffusecolor;
+	float3 dir;
+	float padding;
+};
+
+struct PixelInputType
+{
+	float4 position : SV_POSITION;
+	float2 tex : TEXCOORD0;
+};
+
+
+Texture2D textures[2];
+SamplerState SampleType;
+
+float4 BumpPixelShader( PixelInputType input) : SV_TARGET
+{
+	float4 textureColor;
+	float4 bumpMap;
+	float3 bumpNormal;
+	float3 lightDir;
+	float lightIntensity;
+	float4 color;
+	
+	float3 normal = float3(0,0,-1);
+	float3 tangent = float3(1,0,0);
+	float3 binormal = float3(0,1,0);
+	
+	textureColor.rgb = textures[0].Sample(SampleType,input.tex).rgb;
+	textureColor.a = inColor.a;
+	
+	bumpMap = textures[1].Sample(SampleType,input.tex);
+
+	bumpMap.rgb = (bumpMap.rgb*2)-1;
+	bumpMap.a = 0;//textureColor.a;
+	
+	bumpNormal = normal + bumpMap.x * tangent + bumpMap.y * binormal;
+	bumpNormal = normalize(bumpNormal);
+
+	lightDir = -dir;
+	
+	lightIntensity = saturate(dot(bumpNormal,lightDir));
+
+	color.rgb = saturate(diffusecolor.rgb*lightIntensity);
+	color.rgb = color.rgb * textureColor.rgb;// * inColor.w;
+	color.a = textureColor.a;
+	
+	clip( color.a <= (inTexFlags.x*0.5) ? -1:1 );
+	return color;
+}

@@ -1,0 +1,66 @@
+cbuffer ScreenDim
+{
+	float4 ambientLight;
+	float screenWidth;
+	float screenHeight;
+	float spriteDepth;
+	float pad;
+}
+
+struct PixelLightingType
+{
+	float4 position : SV_POSITION;
+	float2 tex : TEXCOORD0;
+	float4 lightPR : TEXCOORD1;
+	float4 lightCI : TEXCOORD2;
+	float4 lightAtt : TEXCOORD3;
+};
+
+Texture2D inTex[2];
+SamplerState Sampler;
+
+float4 LightingPixelShader(PixelLightingType input) : SV_TARGET
+{
+	float3 outColor=0;
+	
+	float3 normal = inTex[1].Sample(Sampler,input.tex).rgb;
+	normal = normal*2-1;
+	normal.z = -normal.z;
+	normal = normalize(normal);
+
+	float depth = inTex[1].Sample(Sampler,input.tex).x;
+	
+	float3 pixel;
+	pixel.x = screenWidth * input.tex.x;
+	pixel.y = screenHeight * input.tex.y;
+	pixel.z = depth*spriteDepth;
+
+	float3 lightVec = input.lightPR.xyz - pixel;
+
+	float d = input.lightPR.w/length(lightVec);
+
+	if (d < input.lightPR.w)
+	{
+		lightVec = normalize(lightVec);
+
+		float Dot = dot(-lightVec,normal.xyz);
+	
+		outColor = Dot * input.lightCI.xyz;
+	}
+	
+	//attenutate
+	
+	outColor /= input.lightAtt.x + ( input.lightAtt.y * d) + (input.lightAtt.z * d * d);
+	return float4(outColor,1);
+}
+
+float4 LightingCombineShader(PixelLightingType input) : SV_TARGET
+{	
+	float4 color = inTex[0].Sample(Sampler,input.tex);
+	float4 shade = inTex[1].Sample(Sampler,input.tex);
+	
+	float4 outColor = color * float4(ambientLight.rgb * ambientLight.w,0);
+	outColor += saturate(color * shade);
+	
+	return outColor;
+}

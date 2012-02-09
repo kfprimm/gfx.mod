@@ -1,0 +1,26 @@
+//D3D11Max2D TBatchImage Pixel Shader
+//Written by Dave Camp - SRS Software 2011
+
+cbuffer CMax2DFlags
+{
+	float4 inColor;
+	float4 inTexFlags;
+};
+
+struct PixelInstanceType
+{
+	float4 position : SV_POSITION;
+	float4 color : COLOR0;
+	float3 srv : TEXTURE;
+};
+
+Texture2DArray srvTextures;
+SamplerState SampleType;
+
+float4 InstancePixelShader(PixelInstanceType input) : SV_TARGET
+{
+	float4 outColor;
+	outColor = srvTextures.Sample(SampleType, input.srv.xyz)*input.color;
+	clip( outColor.a <= (inTexFlags.x*0.5) ? -1:1 );
+	return outColor;
+}
