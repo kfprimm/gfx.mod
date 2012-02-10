@@ -21,11 +21,8 @@ Private
 'Lag fix
 Global _DwmapiDLL = LoadLibraryA("dwmapi.dll")
 
-If Not _DwmapiDLL
-	Notify "Critical Error!~nCannot load 'Dwmapi.DLL'~nExiting.",True
-	End
-EndIf
-Global _FlushGPU() = GetProcAddress(_DwmapiDLL,"DwmFlush")
+Global _FlushGPU()
+If _DwmapiDLL _FlushGPU = GetProcAddress(_DwmapiDLL,"DwmFlush")
 'end of lagfix
 
 Global _graphics:TD3D11Graphics
@@ -466,7 +463,7 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 		
 		'Render lag fix
 		If _windowed
-			_FlushGPU
+			If _DwmapiDLL _FlushGPU
 		Else
 			_d3d11devcon.End_(_query)
 			Local queryData:Int
