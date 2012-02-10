@@ -745,9 +745,9 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		Local g = Max(Min(green,255),0)
 		Local b = Max(Min(blue,255),0)
 
-		_clscolor[0] = OneOver255 * red
-		_clscolor[1] = OneOver255 * green
-		_clscolor[2] = OneOver255 * blue
+		_clscolor[0] = OneOver255 * r
+		_clscolor[1] = OneOver255 * g
+		_clscolor[2] = OneOver255 * b
 	EndMethod
 
 	Method SetViewport( x,y,width,height )
