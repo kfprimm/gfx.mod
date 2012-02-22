@@ -1,0 +1,12 @@
+*.*.*.a
+*.bmx.bak
+*.*.*.i
+*.debug
+*.exe
+*.dll
+*.def
+.*.bmx
+.bmx/
+*.debug*
+*.mod/doc/commands.html
+*/LICENSE

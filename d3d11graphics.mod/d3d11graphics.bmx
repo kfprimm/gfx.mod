@@ -1,6 +1,6 @@
 Strict
 
-Module SRS.D3D11Graphics
+Module GFX.D3D11Graphics
 
 ModuleInfo "Version: V1.0"
 ModuleInfo "Author: Dave Camp"
@@ -14,7 +14,7 @@ ModuleInfo "Fixed crash when exiting from fullscreen then using another DX drive
 Import BRL.Graphics
 Import BRL.LinkedList
 Import BRL.Retro
-Import SRS.DirectX11
+Import GFX.DirectXEx
 
 ?Win32
 Private

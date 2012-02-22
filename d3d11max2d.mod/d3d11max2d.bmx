@@ -1,6 +1,6 @@
 Strict
 
-Module SRS.D3D11Max2D
+Module GFX.D3D11Max2D
 
 ModuleInfo "Version: V1.0"
 ModuleInfo "Author: Dave Camp"
@@ -11,7 +11,7 @@ ModuleInfo "Copyright: SRS Software"
 
 Import BRL.Max2D 
 Import BRL.TextStream
-Import SRS.D3D11Graphics
+Import GFX.D3D11Graphics
 
 Include "TBatchimage.bmx"
 Include "TBuffer.bmx" 'Experimental
