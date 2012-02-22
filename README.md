@@ -5,7 +5,7 @@ These modules are a merger of SRS.mod and select graphics-related modules from P
 ### License
 
 + GFX.D3D11Graphics, GFX.D3D11Max2D - BSD (3-Clause)
-+ GFX.Max2DEx, GFX.D3D9Max2DEx, GFX.GLMax2DEx - MIT 
++ GFX.Max2DEx, GFX.D3D9Max2DEx, GFX.GLMax2DEx, GFX.CgToolkit, GFX.CgShaderDriver - MIT 
 + GFX.DirectXEx - BSD (3-Clause) & MIT
 
 ### Contributors
