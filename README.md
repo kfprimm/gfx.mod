@@ -11,7 +11,7 @@ These modules are a merger of SRS.mod and select graphics-related modules from P
 ### Contributors
 
 + Dave Camp
-+ Kevin Primm <kfprimm@sys87.co>
++ Kevin Primm (kfprimm@sys87.co)
 
 ### SRS.mod readme
 > This is a D3D11 driver for use with BlitzMax. www.blitzbasic.com
