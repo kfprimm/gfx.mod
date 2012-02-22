@@ -9,6 +9,7 @@ ModuleInfo "Author: Kevin Primm"
 ModuleInfo "License: MIT"
 
 Import BRL.Max2D
+Import "batchimage.bmx"
 Import "buffers.bmx"
 Import "shaders.bmx"
 
@@ -23,6 +24,8 @@ Type TMax2DExDriver Extends TMax2DDriver
 		bf._parent=_parent.CreateFrameFromPixmap(pixmap,flags)
 		Return bf
 	End Method
+	
+	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False) Abstract
 	
 	Method SetBlend( blend )
 		Return _parent.SetBlend(blend)
@@ -235,3 +238,27 @@ End Rem
 Function AddShaderCodeFrags(code:TShaderCode,frags:TShaderFrag[])
 	Return code.AddFrags(frags)
 End Function
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False)
+	Return TMax2DExDriver(GetGraphicsDriver()).CreateBatchImage(image,color,rotation,scale,uv,frames)
+EndFunction
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function UpdateBatchImage(image:TBatchImage,position#[]=Null,color#[]=Null,rotation#[]=Null,scale#[]=Null,uv#[]=Null,frames[]=Null)
+	Return image.Update(position,color,rotation,scale,uv,frames)
+End Function
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function DrawBatchImage(image:TBatchImage,frame=-1)
+	Return image.Draw(frame)
+EndFunction
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function DestroyBatchImage(image:TBatchImage)
+	Return image.Destroy()
+EndFunction

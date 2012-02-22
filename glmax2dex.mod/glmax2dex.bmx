@@ -18,30 +18,6 @@ Type TGLBuffer Extends TBuffer
 	Field _depth
 End Type
 
-Type TGLBufferedGraphics Extends TGraphics
-	Field _width,_height
-	
-	Function Make:TGLBufferedGraphics(buffer:TBuffer)
-		Global g:TGLBufferedGraphics=New TGLBufferedGraphics
-		g._width=buffer._width
-		g._height=buffer._height
-		Return g
-	End Function
-	
-	Method Driver:TGraphicsDriver()
-		Return Null
-	End Method
-	
-	Method GetSettings( width Var,height Var,depth Var,hertz Var,flags Var )
-		width=_width
-		height=_height
-	End Method
-	
-	Method Close()
-		Return False
-	End Method
-End Type
-
 Type TGLSLData
 	Field _prog,_vert,_frag
 End Type
@@ -115,6 +91,10 @@ Type TGLSLDriver Extends TShaderDriver
 End Type
 
 Type TGLMax2DExDriver Extends TMax2DExDriver
+	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False)
+    Throw "Batching support needs implementation!"
+	End Method
+	
 	Method SetGraphics(g:TGraphics)
 		Super.SetGraphics g
 		glewInit

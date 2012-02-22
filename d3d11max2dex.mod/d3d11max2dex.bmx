@@ -1,32 +1,37 @@
-Private 
 
-Type TBatchImageGlobals
-	Field _vshader:ID3D11VertexShader[32]
-	Field _pshader:ID3D11PixelShader
-	Field _layout:ID3D11InputLayout
+Strict
 
-	Field _vs$ = LoadText("incbin::batch.vs")
-	Field _ps$ = LoadText("incbin::batch.ps")
+Module GFX.D3D11Max2DEx
+ModuleInfo "Author: Kevin Primm"
+ModuleInfo "License: MIT"
+ModuleInfo "Credit: Code derived from SRS.D3D11Max2D"
+
+Import GFX.Max2DEx
+Import GFX.DirectXEx
+
+Incbin "batch.vs"
+Incbin "batch.ps"
+
+?Win32
+
+Type TD3D11BatchImage Extends TBatchImage
+	Global _gvshader:ID3D11VertexShader[32]
+	Global _gpshader:ID3D11PixelShader
+	Global _glayout:ID3D11InputLayout
+
+	Global _vs$ = LoadText("incbin::batch.vs")
+	Global _ps$ = LoadText("incbin::batch.ps")
 	
-	Field _shaderready
+	Global _shaderready
 	
-	Method FreeResources()
+	Function FreeResources()
 		For Local i = 0 Until 32
 			SAFE_RELEASE(_vshader[i])
 		Next
 		SAFE_RELEASE(_pshader)
 		SAFE_RELEASE(_layout)
-	EndMethod
-EndType
+	End Function
 
-Incbin "batch.vs"
-Incbin "batch.ps"
-
-Global _BIG:TBatchImageGlobals
-
-Public
-
-Type TBatchImage
 	Field _readytodraw
 	Field _isvalid
 	
@@ -125,7 +130,7 @@ Type TBatchImage
 		_ilength = -1
 		_shaderindex = color Shl 4 + rotation Shl 3 + scale Shl 2 + uv Shl 1 + frames
 		
-		If Not _BIG._vshader[_shaderindex]
+		If Not _gvshader[_shaderindex]
 			Local hr
 			Local vscode:ID3DBlob
 			Local pErrorMsg:ID3DBlob
@@ -155,7 +160,7 @@ Type TBatchImage
 			Defines[index] = 0
 			Defines[index+1] = 0
 
-			hr = D3DCompile(_BIG._vs,_BIG._vs.length,Null,Defines,Null,"InstanceVertexShader","vs_4_0",..
+			hr = D3DCompile(_vs,_vs.length,Null,Defines,Null,"InstanceVertexShader","vs_4_0",..
 							D3D11_SHADER_OPTIMIZATION_LEVEL3,0,vscode,pErrorMsg)
 			If pErrorMsg
 				Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
@@ -168,7 +173,7 @@ Type TBatchImage
 				End
 			EndIf
 
-			If _d3d11dev.CreateVertexShader(vscode.GetBufferPointer(),vscode.GetBufferSize(),Null,_BIG._vshader[_shaderindex])<0
+			If _d3d11dev.CreateVertexShader(vscode.GetBufferPointer(),vscode.GetBufferSize(),Null,_gvshader[_shaderindex])<0
 				WriteStdout "Cannot create instance vertex shader id:"+_shaderindex+" - compiled ok~n"
 				End
 			EndIf
@@ -177,7 +182,7 @@ Type TBatchImage
 				MemFree Byte Ptr(Defines[i])
 			Next
 
-			If Not _BIG._layout
+			If Not _glayout
 				Local bLayout[] = [0,0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_VERTEX_DATA,0,..
 						0,0,DXGI_FORMAT_R32G32B32A32_FLOAT,1,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_INSTANCE_DATA,1,..
 						0,1,DXGI_FORMAT_R32G32B32A32_FLOAT,2,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_INSTANCE_DATA,1,..
@@ -196,7 +201,7 @@ Type TBatchImage
 				bLayout[42] = Int("TEXCOORD".ToCString())
 				bLayout[49] = Int("TEXCOORD".ToCString())
 
-				If _d3d11dev.CreateInputLayout(bLayout,8,vscode.GetBufferPointer(),vscode.GetBufferSize(),_BIG._layout)<0
+				If _d3d11dev.CreateInputLayout(bLayout,8,vscode.GetBufferPointer(),vscode.GetBufferSize(),_glayout)<0
 					Notify "Error!~nCannot create InputLayout for TBatchImage~nExiting."
 					End
 				EndIf
@@ -212,13 +217,13 @@ Type TBatchImage
 			EndIf
 		EndIf
 		
-		If Not _BIG._pshader
+		If Not _gpshader
 			'create batching pixel shader
 			Local hr
 			Local pscode:ID3DBlob
 			Local pErrorMsg:ID3DBlob
 
-			hr = D3DCompile(_BIG._ps,_BIG._ps.length,Null,Null,Null,"InstancePixelShader","ps_4_0",..
+			hr = D3DCompile(_gps,_gps.length,Null,Null,Null,"InstancePixelShader","ps_4_0",..
 								D3D11_SHADER_OPTIMIZATION_LEVEL3,0,pscode,pErrorMsg)
 									
 			If pErrorMsg
@@ -232,13 +237,13 @@ Type TBatchImage
 				End
 			EndIf
 
-			If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_BIG._pshader)<0
+			If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_gpshader)<0
 				Notify "Cannot create pixel shader for coloring - compiled ok~n",True
 				End
 			EndIf
 		EndIf
 	
-		_vshader = _BIG._vshader[_shaderindex]
+		_vshader = _gvshader[_shaderindex]
 		_isvalid = True
 		Return Self
 	EndMethod
@@ -342,9 +347,9 @@ Type TBatchImage
 		EndIf
 		
 		_d3d11devcon.IASetVertexBuffers(0,7,_buffers,_strides,_offsets)
-		_d3d11devcon.IASetInputLayout(_BIG._layout)
+		_d3d11devcon.IASetInputLayout(_glayout)
 		_d3d11devcon.VSSetShader(_vshader,Null,0)
-		_d3d11devcon.PSSetShader(_BIG._pshader,Null,0)
+		_d3d11devcon.PSSetShader(_gpshader,Null,0)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP)
 		_d3d11devcon.DrawInstanced(4,_ilength*0.5,0,0)
 	EndMethod
@@ -360,39 +365,65 @@ Type TBatchImage
 		SAFE_RELEASE(_fbuffer)
 		SAFE_RELEASE(_uvbuffer)
 	EndMethod
-EndType
+End Type
 
-Function CreateBatchImage:TBatchImage(image:TImage Var,color=False,rotation=False,scale=False,uv=False,frames=False)
-	If Not VerifyDX11Max2DDriver() Return
+Type TD3D11Buffer Extends TBuffer
+	Field _rtv:ID3D11RenderTargetView
+End Type
 
-	If Not image Return
+Type THLSL11Driver Extends TShaderDriver
+  
+End Type
+
+Type TD3D11Max2DExDriver Extends TMax2DExDriver
+	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False)
+    Return New TD3D11BatchImage.Create(image,color,rotation,scale,uv,frames)
+	End Method
 	
-	Return New TBatchImage.Create(image,color,rotation,scale,uv,frames)
-EndFunction
-
-Function UpdateBatchImage(bimage:TBatchImage,position#[]=Null,color#[]=Null,rotation#[]=Null,scale#[]=Null,uv#[]=Null,frames[]=Null)
-	If Not bimage Return
-	If Not bimage._isvalid Return
-
-	bimage.Update(position,color,rotation,scale,uv,frames)
-EndFunction
-
-Function DrawBatchImage(bimage:TBatchImage Var,frame=-1)
-	If Not bimage Return
-	If Not bimage._isvalid Return
+	Method MakeBuffer:TBuffer(src:Object,width,height,flags)
+		Local frame:TBufferedImageFrame=TBufferedImageFrame(src)
+		If Not frame Return Null
+		If frame._buffer Return frame._buffer
+		
+		Local buffer:TD3D11Buffer=New TD3D11Buffer
+		buffer._rtv = TD3D11ImageFrame(frame._parent)._rtv
+		frame._buffer = buffer
+		Return frame._buffer		
+	End Method
 	
-	bimage.Draw(frame)
-EndFunction
+	Method SetBuffer(buffer:TBuffer)
+		_currentbuffer=buffer		
+		Local rtv:ID3D11RenderTargetView
+		If _currentbuffer <> _backbuffer
+		  rtv = _currentbuffer._rtv
+		Else
+		  rtv = _d3d11Graphics.GetRenderTarget()
+		EndIf
+		_d3d11devcon.OMSetRenderTargets(1,Varptr rtv,Null)
+	End Method	
+End Type
 
-Function DestroyBatchImage(bimage:TBatchImage Var)
-	If Not bimage Return
-	If Not bimage._isvalid Return
-	
-	bimage.Destroy
-	bimage = Null
-EndFunction
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function D3D11Max2DExDriver:TD3D11Max2DExDriver()
+	If D3D11Max2DDriver()
+		Global driver:TD3D11Max2DExDriver=New TD3D11Max2DExDriver
+		driver._parent=D3D11Max2DDriver()
+		Return driver
+	End If
+End Function
 
-Function FreeBatchResources()
-	If _BIG	_BIG.FreeResources()
-	_BIG = Null
-EndFunction
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function HLSL11ShaderDriver:THLSL11Driver()
+	Global _driver:THLSL11Driver=New THLSL11Driver
+	Return _driver
+End Function
+
+Local driver:TD3D11Max2DExDriver=D3D11Max2DExDriver()
+If driver 
+	SetGraphicsDriver driver
+	SetShaderDriver HLSL11ShaderDriver()
+EndIf
