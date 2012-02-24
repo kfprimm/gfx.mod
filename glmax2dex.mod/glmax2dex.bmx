@@ -95,6 +95,18 @@ Type TGLMax2DExDriver Extends TMax2DExDriver
     Throw "Batching support needs implementation!"
 	End Method
 	
+	Method PlotPoints(points#[])
+		Throw "PlotPoints support needs implementation!"
+	End Method
+  
+  Method DrawLines(lines#[],linked)
+		Throw "DrawLines support needs implementation!"
+	End Method 
+  
+  Method DrawImageTiled(image:TImage,x#=0,y#=0,frame=0)
+		Throw "DrawImageTiled support needs implementation!"
+	End Method
+		
 	Method SetGraphics(g:TGraphics)
 		Super.SetGraphics g
 		glewInit

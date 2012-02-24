@@ -25,8 +25,6 @@ Type TMax2DExDriver Extends TMax2DDriver
 		Return bf
 	End Method
 	
-	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False) Abstract
-	
 	Method SetBlend( blend )
 		Return _parent.SetBlend(blend)
 	End Method
@@ -108,6 +106,14 @@ Type TMax2DExDriver Extends TMax2DDriver
 		Return g
 	End Method
 
+	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False) Abstract
+	
+	Method PlotPoints(points#[]) Abstract
+  
+  Method DrawLines(lines#[],linked) Abstract
+  
+  Method DrawImageTiled(image:TImage,x#=0,y#=0,frame=0) Abstract
+	
 	Method MakeBuffer:TBuffer(src:Object,width,height,flags) Abstract
 	
 	Method SetBuffer(buffer:TBuffer) Abstract
@@ -262,3 +268,10 @@ End Rem
 Function DestroyBatchImage(image:TBatchImage)
 	Return image.Destroy()
 EndFunction
+
+Rem
+	bbdoc: Needs documentation. #TODO
+End Rem
+Function DrawLines(lines#[], linked=False)
+	Return TMax2DExDriver(GetGraphicsDriver()).DrawLines(lines, linked)
+End Function

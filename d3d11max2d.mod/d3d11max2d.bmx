@@ -1,3 +1,4 @@
+
 Strict
 
 Module GFX.D3D11Max2D
@@ -7,14 +8,11 @@ ModuleInfo "Author: Dave Camp"
 ModuleInfo "License: SRS Shared Source Code License"
 ModuleInfo "Copyright: SRS Software"
 
-?WIN32
+?Win32
 
 Import BRL.Max2D 
 Import BRL.TextStream
 Import GFX.D3D11Graphics
-
-Include "TBatchimage.bmx"
-Include "TBuffer.bmx" 'Experimental
 
 'Include "TLighting.bmx"
 'Include "TBumpImage.bmx"
@@ -30,12 +28,7 @@ Global _d3d11devcon:ID3D11DeviceContext
 Global _currentrtv:ID3D11RenderTargetView
 Global _driver:TD3D11Max2DDriver
 Global _d3d11graphics:TD3D11Graphics
-Global _max2DGraphics:TMax2DGraphics
-Global _clscolor#[] = [0.0,0.0,0.0,1.0]
-Global _ix#,_iy#,_jx#,_jy#
-Global _linewidth#
-Global _width#,_height#
-Global _currblend
+
 
 'D3D11
 Global _shaderready
@@ -58,11 +51,6 @@ Global _pointbuffer:ID3D11Buffer
 Global _linebuffer:ID3D11Buffer
 Global _projbuffer:ID3D11Buffer
 Global _tilebuffer:ID3D11Buffer
-Global _solidblend:ID3D11BlendState
-Global _maskblend:ID3D11BlendState
-Global _alphablend:ID3D11BlendState
-Global _lightblend:ID3D11BlendState
-Global _shadeblend:ID3D11BlendState
 Global _psflags#[8]
 Global _matrixproj#[16]
 Global _pointarray#[]
@@ -346,17 +334,11 @@ Function CreateD3D11Max2DResources()
 	sd.MinLOD = 0.0
 	sd.MaxLOD = D3D11_FLOAT32_MAX
 
-	If _d3d11dev.CreateSamplerState(sd,_pointsamplerstate)<0
-		Notify "Cannot create point sampler state~nExiting.",True
-		End
-	EndIf
+	If _d3d11dev.CreateSamplerState(sd,_pointsamplerstate)<0 Throw "Cannot create point sampler state~nExiting."
 	
 	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR
 	
-	If _d3d11dev.CreateSamplerState(sd,_linearsamplerstate)<0
-		Notify "Cannot create linear sampler state~nExiting.",True
-		End
-	EndIf
+	If _d3d11dev.CreateSamplerState(sd,_linearsamplerstate)<0 Throw "Cannot create linear sampler state~nExiting." 
 	
 	_d3d11devcon.IASetInputLayout(_max2dlayout)
 	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
@@ -432,7 +414,7 @@ Function FreeD3D11Max2DResources()
 	SAFE_RELEASE(_alphablend)
 	SAFE_RELEASE(_lightblend)
 	SAFE_RELEASE(_shadeblend)
-
+	
 	If _ringbuffer _ringbuffer.Destroy
 	
 	_currentsrv = Null
@@ -606,6 +588,15 @@ Type TD3D11ImageFrame Extends TImageFrame
 EndType
 
 Type TD3D11Max2DDriver Extends TMax2DDriver
+	Field _t:TMax2DGraphics
+	Field _clscolor#[] = [0.0,0.0,0.0,1.0]
+	Field _ix#,_iy#,_jx#,_jy#, _linewidth#, 
+	Field _width#,_height#
+	Field _currblend
+	
+	Field _solidblend:ID3D11BlendState, _maskblend:ID3D11BlendState, _alphablend:ID3D11BlendState, 
+	Field _lightblend:ID3D11BlendState, _shadeblend:ID3D11BlendState
+	
 	Method ToString$()
 		Local Feature$
 		Local FeatureLevel = _d3d11dev.GetFeatureLevel()
@@ -741,10 +732,6 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	EndMethod
 
 	Method SetClsColor( red,green,blue )
-		Local r = Max(Min(red,255),0)
-		Local g = Max(Min(green,255),0)
-		Local b = Max(Min(blue,255),0)
-
 		_clscolor[0] = OneOver255 * r
 		_clscolor[1] = OneOver255 * g
 		_clscolor[2] = OneOver255 * b
@@ -1137,212 +1124,3 @@ End Function
 
 Local driver:TD3D11Max2DDriver = D3D11Max2DDriver()
 
-
-'----------- Extra Max2D functionality -----------
-'Specific to Dx11 at the mo :)
-Function PlotPoints(points#[])
-	If Not VerifyDX11Max2DDriver() Return
-	If points.length<2 Or (points.length&1) Return
-	
-	Local buildbuffer = False
-	Local ox#=_max2DGraphics.origin_x
-	Local oy#=_max2DGraphics.origin_y
-	
-	If _pointarray.length <> points.length*2
-		'BUG FIX - Causes intermittent EAV if removed!
-		'Only when array size is changed every frame
-		_pointarray = Null
-		GCCollect()
-		
-		_pointarray = _pointarray[..points.length*2]
-		buildbuffer = True
-	EndIf
-
-	Local i
-	Repeat
-		_pointarray[i*4+0] = points[i*2+0] + ox
-		_pointarray[i*4+1] = points[i*2+1] + oy
-
-		i:+1
-	Until i = points.length*0.5
-
-	If Not buildbuffer
-		MapBuffer(_pointBuffer,0,D3D11_MAP_WRITE_DISCARD,0,_pointarray,SizeOf(_pointarray))
-	Else
-		SAFE_RELEASE(_pointBuffer)
-		CreateBuffer(_pointbuffer,SizeOf(_pointarray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_pointarray,"Point Array")
-	EndIf		
-
-	Local stride=16
-	Local offset=0
-	
-	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-	_d3d11devcon.PSSetShader(_colorpixelshader,Null,0)
-	_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-	_d3d11devcon.IASetInputLayout(_max2dlayout)
-	_d3d11devcon.IASetVertexBuffers(0,1,Varptr _pointBuffer,Varptr stride,Varptr offset)
-	_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST)
-	_d3d11devcon.Draw(points.length*0.5,0)
-EndFunction
-
-Function DrawLines(lines#[],Linked=False)
-	If Not VerifyDX11Max2DDriver() Return
-	If lines.length<4 Or (lines.length&1) Return
-	If linked And (lines.length Mod 4) Return
-	
-	Local buildbuffer = False
-	
-	Local handlex#=_max2DGraphics.handle_x
-	Local handley#=_max2DGraphics.handle_y
-	Local ox#=_max2DGraphics.origin_x
-	Local oy#=_max2DGraphics.origin_y
-
-	If _linearray.length <> lines.length*2
-		'BUG FIX - Causes intermittent EAV if removed!
-		'Only when array size is changed every frame
-		_linearray = Null
-		GCCollect()
-
-		_linearray = _linearray[..lines.length*2]
-		buildbuffer = True
-	EndIf
-	
-	Local index = 0	
-	For Local i = 0 Until lines.length Step 2
-		_linearray[index] = (handlex+lines[i])*_ix + (handley+lines[i+1])*_iy + ox
-		_linearray[index+1] = (handlex+lines[i])*_jx + (handley+lines[i+1])*_jy + oy
-		index:+4
-	Next
-
-	Local stride = 16
-	Local offset = 0
-	
-	If Not buildbuffer
-		MapBuffer(_linebuffer,0,D3D11_MAP_WRITE_DISCARD,0,_linearray,SizeOf(_linearray))
-	Else
-		SAFE_RELEASE(_linebuffer)
-		CreateBuffer(_linebuffer,SizeOf(_linearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_linearray,"Line Array")
-	EndIf
-	
-	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-	_d3d11devcon.PSSetShader(_colorpixelshader,Null,0)
-	_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-	_d3d11devcon.IASetInputLayout(_max2dlayout)
-	'LINESTRIP(=3) or LINELIST(=2)
-	_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP-(linked=True))
-	_d3d11devcon.IASetVertexBuffers(0,1,Varptr _linebuffer,Varptr stride,Varptr offset)
-	_d3d11devcon.Draw(lines.length*0.5,0)
-EndFunction
-
-Function DrawImageTiled(image:TImage,x#=0,y#=0,frame=0)
-	If Not VerifyDX11Max2DDriver() Return
-	
-	Local iframe:TD3D11ImageFrame=TD3D11ImageFrame(image.Frame(frame))
-	If Not iframe Return
-
-	Local iw=image.width
-	Local ih=image.height
-	Local ox=_max2DGraphics.viewport_x-iw+1
-	Local oy=_max2DGraphics.viewport_y-ih+1
-	Local tx#=Floor(x+_max2DGraphics.origin_x-image.handle_x)-ox
-	Local ty#=Floor(y+_max2DGraphics.origin_y-image.handle_y)-oy
-
-	If tx>=0 tx=tx Mod iw + ox Else tx=iw - -tx Mod iw + ox
-	If ty>=0 ty=ty Mod ih + oy Else ty=ih - -ty Mod ih + oy
-
-	Local vw=_max2DGraphics.viewport_x+_max2DGraphics.viewport_w
-	Local vh=_max2DGraphics.viewport_y+_max2DGraphics.viewport_h
-
-	Local width# = vw - tx
-	Local height# = vh - ty
-
-	Local nx = Ceil((vw - tx) / iw)
-	Local ny = Ceil((vh - ty) / ih)
-
-	Local numtiles = nx*ny
-
-	Local buildbuffer = False
-	
-	If _tilearray.length <> 24*numtiles
-		'BUG FIX - Causes intermittent EAV if removed!
-		'Only when array size is changed every frame
-		_tilearray = Null
-		GCCollect()
-		
-		_tilearray = _tilearray[..24*numtiles]
-		buildbuffer = True
-	EndIf
-	
-	Local ii,jj
-	Local index
-	Local ar#[]=_tilearray
-	Local u#=iframe._uscale * iw
-	Local v#=iframe._vscale * ih
-	
-	For Local ay = 0 Until ny
-		For Local ax = 0 Until nx
-			_tilearray[index + 0] = tx + ii
-			_tilearray[index + 1] = ty + jj
-			_tilearray[index + 2] = 0.0
-			_tilearray[index + 3] = 0.0
-
-			_tilearray[index + 4] = tx + iw + ii
-			_tilearray[index + 5] = ty + jj
-			_tilearray[index + 6] = u
-			_tilearray[index + 7] = 0.0
-
-			_tilearray[index + 8] = tx + ii
-			_tilearray[index + 9] = ty + ih + jj
-			_tilearray[index + 10] = 0.0
-			_tilearray[index + 11] = v
-			
-			_tilearray[index + 12] = tx + ii
-			_tilearray[index + 13] = ty + ih + jj
-			_tilearray[index + 14] = 0.0
-			_tilearray[index + 15] = v
-			
-			_tilearray[index + 16] = tx + iw + ii
-			_tilearray[index + 17] = ty + jj
-			_tilearray[index + 18] = u
-			_tilearray[index + 19] = 0.0
-
-			_tilearray[index + 20] = tx + iw + ii
-			_tilearray[index + 21] = ty + ih + jj
-			_tilearray[index + 22] = u
-			_tilearray[index + 23] = v
-
-			ii:+image.width
-
-			index :+ 24
-		Next
-		ii = 0
-		jj:+image.height
-	Next
-
-	If Not buildbuffer
-		MapBuffer(_tilebuffer,0,D3D11_MAP_WRITE_DISCARD,0,_tilearray,SizeOf(_tilearray))
-	Else
-		SAFE_RELEASE(_tilebuffer)
-		CreateBuffer(_tilebuffer,SizeOf(_tilearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_tilearray,"Tile Array")
-	EndIf
-
-	Local stride = 16
-	Local offset = 0
-	_currentsrv = iframe._srv
-	
-	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-	_d3d11devcon.PSSetShader(_texturepixelshader,Null,0)
-	_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-	_d3d11devcon.IASetInputLayout(_max2dlayout)
-	_d3d11devcon.PSSetShaderResources(0,1,Varptr iframe._srv)
-	_d3d11devcon.IASetVertexBuffers(0,1,Varptr _tilebuffer,Varptr stride,Varptr offset)
-	_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
-
-	_d3d11devcon.Draw(6*numtiles,0)
-
-EndFunction
-
-Function VerifyDX11Max2DDriver()
-	If GetGraphicsDriver().ToSTring()[0..9] = "DirectX11" Return True
-EndFunction
-? 'WIN32

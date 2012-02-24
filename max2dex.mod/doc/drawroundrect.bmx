@@ -1,8 +1,8 @@
 
 Strict
 
-Import Prime.GLMax2DEx
-Import Prime.D3D9Max2DEx
+Import GFX.GLMax2DEx
+Import GFX.D3D9Max2DEx
 
 Graphics 800,600
 

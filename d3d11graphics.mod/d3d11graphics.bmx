@@ -348,11 +348,7 @@ Type TD3D11Graphics Extends TGraphics
 	EndMethod
 	
 	Method Flip( sync )
-		If sync
-			_swapchain.Present(1,0)
-		Else
-			_swapchain.Present(0,0)
-		EndIf
+		_swapchain.Present(sync = True,0)
 	EndMethod
 	
 	Method GetRenderTarget:ID3D11RenderTargetView()
@@ -374,35 +370,24 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 
 		If Not _d3d11 Return Null
 	
-		If CreateDXGIFactory(IID_IDXGIFactory,_Factory)<0
-			Notify "Error creating IDXGIFactory!~nExiting.",True
-			End
-		EndIf
+		If CreateDXGIFactory(IID_IDXGIFactory,_Factory)<0 Throw "Error creating IDXGIFactory!~nExiting."
 
 		'TODO: Multiple GPUs?
-		If _Factory.EnumAdapters(0,_Adapter)<0
-			Notify "Error enumerating GPUs!~nExiting.",True
-			End
-		EndIf
-		
+		If _Factory.EnumAdapters(0,_Adapter)<0 Throw "Error enumerating GPUs!~nExiting."
+
 		'TODO: Each GPU may have multiple outputs?
-		If _Adapter.EnumOutputs(0,_Output)<0
-			Notify "Error enumeration graphics modes!~nExiting",True
-			End
-		EndIf
+		If _Adapter.EnumOutputs(0,_Output)<0 Throw "Error enumeration graphics modes!~nExiting"
 		
 		Local nummodes
 		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,Null)<0
-			Notify "Error getting number of graphics modes!~nExiting.",True
-			End
+			Throw "Error getting number of graphics modes!~nExiting."
 		EndIf
 		_Displaymodes = _Displaymodes[..nummodes]
 
 		Local modesptr:Byte Ptr=MemAlloc(SizeOf(DXGI_MODE_DESC)*nummodes)
 		
 		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,modesptr)<0
-			Notify "Error filling display modes data!~nExiting.",True
-			End
+			Throw "Error filling display modes data!~nExiting."
 		EndIf
 		
 		_modes=New TGraphicsMode[nummodes]
