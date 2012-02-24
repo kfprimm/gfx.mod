@@ -12,7 +12,7 @@ ModuleInfo "Copyright: SRS Software"
 
 Import BRL.Max2D 
 Import BRL.TextStream
-Import GFX.D3D11Graphics
+Import GFX.DXGraphicsEx
 
 'Include "TLighting.bmx"
 'Include "TBumpImage.bmx"
@@ -22,43 +22,10 @@ Private
 'Max2D
 Const OneOver255# = 1.0 / 255.0
 
-Global _max2dshaders:TD3D11Max2DShaders
-Global _d3d11dev:ID3D11Device
-Global _d3d11devcon:ID3D11DeviceContext
-Global _currentrtv:ID3D11RenderTargetView
-Global _driver:TD3D11Max2DDriver
-Global _d3d11graphics:TD3D11Graphics
-
 
 'D3D11
-Global _shaderready
-Global _currentshader:ID3D11PixelShader
-Global _currentsrv:ID3D11ShaderResourceView
-Global _currentsampler:ID3D11SamplerState
-Global _pointsamplerstate:ID3D11SamplerState
-Global _linearsamplerstate:ID3D11SamplerState
-Global _rs:ID3D11RasterizerState
-Global _vertexshader:ID3D11VertexShader
-Global _texturepixelshader:ID3D11PixelShader
-Global _colorpixelshader:ID3D11PixelShader
-Global _max2dlayout:ID3D11InputLayout
-Global _currentbuffer:ID3D11Buffer
-Global _vertexbuffer:ID3D11Buffer
-Global _psfbuffer:ID3D11Buffer
-Global _polybuffer:ID3D11Buffer
-Global _ovalbuffer:ID3D11Buffer
-Global _pointbuffer:ID3D11Buffer
-Global _linebuffer:ID3D11Buffer
-Global _projbuffer:ID3D11Buffer
-Global _tilebuffer:ID3D11Buffer
-Global _psflags#[8]
-Global _matrixproj#[16]
-Global _pointarray#[]
-Global _polyarray#[]
-Global _ovalarray#[]
-Global _linearray#[]
-Global _tilearray#[]
-Global _ringbuffer:TD3D11RingBuffer
+Global _d3d11dev:ID3D11Device
+Global _d3d11devcon:ID3D11DeviceContext
 
 Global _TD3D11ImageFrameList:TList
 
@@ -88,10 +55,7 @@ Type TD3D11RingBuffer
 		Desc.BindFlags = D3D11_BIND_VERTEX_BUFFER
 		Desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE
 
-		If _d3d11dev.CreateBuffer(Desc,Null,_buffer)<0
-			Notify "Cannot create vertex ring buffer~nExiting.",True
-			End
-		EndIf
+		If _d3d11dev.CreateBuffer(Desc,Null,_buffer)<0 Throw "Cannot create vertex ring buffer~nExiting."
 		
 		Return Self
 	EndMethod
@@ -105,10 +69,7 @@ Type TD3D11RingBuffer
 			_ringPos = 0
 		EndIf
 		
-		If _d3d11devcon.Map(_buffer,0,MapPermission,0,mRes)<0
-			Notify "Cannot map RingBuffer!"
-			End
-		EndIf
+		If _d3d11devcon.Map(_buffer,0,MapPermission,0,mRes)<0 Throw "Cannot map RingBuffer!"
 		
 		MemCopy mRes.pData+_ringPos,Data,SizeOf(Data)
 		_d3d11devcon.UnMap(_buffer,0)
@@ -123,303 +84,6 @@ Type TD3D11RingBuffer
 	EndMethod
 EndType
 
-Function CreateBuffer(Buffer:ID3D11Buffer Var,ByteWidth,Usage,BindFlags,CPUAccessFlags,Data:Byte Ptr=Null,Name$="")
-	Local SubResourceData:D3D11_SUBRESOURCE_DATA
-	Local hr
-
-	Local Desc:D3D11_BUFFER_DESC = New D3D11_BUFFER_DESC	
-	Desc.ByteWidth = ByteWidth
-	Desc.Usage = Usage
-	Desc.BindFlags = BindFlags
-	Desc.CPUAccessFlags = CPUAccessFlags
-
-	If Data
-		SubResourceData = New D3D11_SUBRESOURCE_DATA
-		SubResourceData.pSysMem = Data
-		
-		hr =  _d3d11dev.CreateBuffer(Desc,SubResourceData,Buffer)
-	Else
-		hr = _d3d11dev.CreateBuffer(Desc,Null,Buffer)
-	EndIf
-	
-	If hr<0
-		WriteStdout "Cannot create buffer for : "+Name+"~n"
-		Return -1
-	Else
-		Return True
-	EndIf
-EndFunction
-
-Function MapBuffer(Buffer:ID3D11Buffer Var,SubresourceIndex,MapType,MapFlags,Data:Byte Ptr,Size,Name$="")
-	If Not Buffer Return
-
-	Local Map:D3D11_MAPPED_SUBRESOURCE = New D3D11_MAPPED_SUBRESOURCE
-
-	If _d3d11devcon.Map(Buffer,SubresourceIndex,MapType,MapFlags,Map)<0
-		Notify "Error! "+Name+"~nCannot map data for resources!~n"
-		End
-	Else
-		'For Local i = 0 Until Size
-		'	Map.pData[i] = Data[i]
-		'Next
-		MemCopy Map.pData,Data,Size
-		_d3d11devcon.UnMap(Buffer,SubresourceIndex)
-	EndIf
-	Return True
-EndFunction
-
-Function EnableAlphaTest()
-	If _psflags[4] = 1.0 Return
-	_psflags[4] = 1.0
-	MapBuffer(_psfbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_psflags,SizeOf(_psflags))
-EndFunction
-
-Function DisableAlphaTest()
-	If _psflags[4] = 0.0 Return
-	_psflags[4] = 0.0
-	MapBuffer(_psfbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_psflags,SizeOf(_psflags))
-EndFunction
-
-Function CreateD3D11Max2DResources()
-	If _shaderready Return
-	
-	If Not _max2dshaders _max2dshaders = New TD3D11Max2DShaders
-	
-	_ringbuffer:TD3D11RingBuffer = New TD3D11RingBuffer.Create()
-		
- 	Local dsdesc:D3D11_DEPTH_STENCIL_DESC =  New D3D11_DEPTH_STENCIL_DESC
-	dsdesc.DepthEnable=False
-	dsdesc.StencilEnable=False
-	Local dsstate:ID3D11DepthStencilState
-
-	If _d3d11dev.CreateDepthStencilState(dsdesc,dsstate)<0
-		WriteStdout "Cannot create depth stencil state~n"
-		Return
-	EndIf
-	
-	_d3d11devcon.OMSetDepthStencilState(dsstate,0)
-	_d3d11graphics.AddRelease dsstate
-
-	'rasterizer state
-	Local rsdesc:D3D11_RASTERIZER_DESC = New D3D11_RASTERIZER_DESC
-	rsdesc.Fillmode = D3D11_FILL_SOLID
-	rsdesc.CullMode = D3D11_CULL_NONE
-	rsdesc.ScissorEnable = True
-
-	If _d3d11dev.CreateRasterizerState(rsdesc,_rs)<0
-		WriteStdout "Cannot create rasterizer state~n"
-		Return
-	EndIf
-	
-	_d3d11devcon.RSSetScissorRects(1,[0,0,GraphicsWidth(),GraphicsHeight()])
-
-	_d3d11devcon.RSSetState(_rs)
-	_d3d11graphics.AddRelease _rs
-	
-	'create shaders
-	Local hr
-	Local vscode:ID3DBlob
-	Local pscode:ID3DBlob
-	Local pErrorMsg:ID3DBlob
-	
-	'create vertex shader
-	hr = D3DCompile(_max2dshaders._max2Dvs,_max2dshaders._max2Dvs.length,Null,Null,Null,"StandardVertexShader","vs_4_0",..
-							D3D11_SHADER_OPTIMIZATION_LEVEL3,0,vscode,pErrorMsg)
-	If pErrorMsg
-		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
-		WriteStdout String.fromCString(_ptr)
-		
-		SAFE_RELEASE(pErrorMsg)
-	EndIf
-		
-	If hr<0
-			WriteStdout "Cannot compile vertex shader source code~n"
-			Return
-	EndIf
-
-	If _d3d11dev.CreateVertexShader(vscode.GetBufferPointer(),vscode.GetBufferSize(),Null,_vertexshader)<0
-		WriteStdout "Cannot create vertex shader - compiled ok~n"
-		Return
-	EndIf
-	
-	'create input layout for the vertex shader
-	Local polyLayout[] = [	0,0,DXGI_FORMAT_R32G32_FLOAT,0,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_VERTEX_DATA,0,..
-							0,0,DXGI_FORMAT_R32G32_FLOAT,0,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_VERTEX_DATA,0]
-	
-	polyLayout[0] = Int("POSITION".ToCString())
-	polyLayout[7] = Int("TEXCOORD".ToCString())
-	
-	hr = _d3d11dev.CreateInputLayout(polyLayout,2,vscode.GetBufferPointer(),vscode.GetBuffersize(),_max2dlayout)
-	
-	MemFree Byte Ptr(Int(polyLayout[0]))
-	MemFree Byte Ptr(Int(polyLayout[7]))
-	
-	If hr<0
-		WriteStdout "Cannot create shader input layout~n"
-		Return
-	EndIf
-
-	'create texture pixel shader
-	hr = D3DCompile(_max2dshaders._max2Dps,_max2dshaders._max2Dps.length,Null,Null,Null,"TexturePixelShader","ps_4_0",..
-								D3D11_SHADER_OPTIMIZATION_LEVEL3,0,pscode,pErrorMsg)
-									
-	If pErrorMsg
-		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
-		WriteStdout String.fromCString(_ptr)
-			
-		SAFE_RELEASE(pErrorMsg)
-	EndIf
-	If hr<0
-		Notify "Cannot compile pixel shader source code for texturing!~nShutting down."
-		End
-	EndIf
-
-	If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_texturepixelshader)<0
-		Notify "Cannot create pixel shader for texturing - compiled ok~n",True
-		End
-	EndIf
-	
-	'create color pixel shader
-	hr = D3DCompile(_max2dshaders._max2Dps,_max2dshaders._max2Dps.length,Null,Null,Null,"ColorPixelShader","ps_4_0",..
-								D3D11_SHADER_OPTIMIZATION_LEVEL3,0,pscode,pErrorMsg)
-									
-	If pErrorMsg
-		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
-		WriteStdout String.fromCString(_ptr)
-			
-		SAFE_RELEASE(pErrorMsg)
-	EndIf
-	If hr<0
-		Notify "Cannot compile pixel shader source code for coloring!~nShutting down."
-		End
-	EndIf
-
-	If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_colorpixelshader)<0
-		Notify "Cannot create pixel shader for coloring - compiled ok~n",True
-		End
-	EndIf
-
-	'release blobs
-	SAFE_RELEASE(vscode)
-	SAFE_RELEASE(pscode)
-	SAFE_RELEASE(pErrorMsg)			'Should NEVER need this if we actually get here
-	
-	'create vertex buffer
-	CreateBuffer(_vertexbuffer,64,D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,Null,"Vertex Buffer")	
-
-	'matrix buffer for orthogonal matrix
-	_matrixproj = [ 2.0/_width,0.0,0.0,-1-(1.0/_width)+(1.0/_width),..
-					0.0,-2.0/_height,0.0,1+(1.0/_height)-(1.0/_height),..
-					0.0,0.0,1.0,0.0,..
-					0.0,0.0,0.0,1.0]
-	CreateBuffer(_projbuffer,64,D3D11_USAGE_DYNAMIC,D3D11_BIND_CONSTANT_BUFFER,D3D11_CPU_ACCESS_WRITE,_matrixproj,"Matrix Buffer")
-	
-	'create buffer for pixel shader flags
-	_psflags = [1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0]
-	CreateBuffer(_psfbuffer,32,D3D11_USAGE_DYNAMIC,D3D11_BIND_CONSTANT_BUFFER,D3D11_CPU_ACCESS_WRITE,_psflags,"Pixel Shader Flags Buffer")
-	
-	'create texture sampler states
-	Local sd:D3D11_SAMPLER_DESC = New D3D11_SAMPLER_DESC
-	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT
-	sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP
-	sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP
-	sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP
-	sd.MipLODBias = 0.0
-	sd.MaxAnisotropy = 1
-	sd.ComparisonFunc = D3D11_COMPARISON_GREATER_EQUAL
-	sd.BorderColor0 = 0.0
-	sd.BorderColor1 = 0.0
-	sd.BorderColor2 = 0.0
-	sd.BorderColor3 = 0.0
-	sd.MinLOD = 0.0
-	sd.MaxLOD = D3D11_FLOAT32_MAX
-
-	If _d3d11dev.CreateSamplerState(sd,_pointsamplerstate)<0 Throw "Cannot create point sampler state~nExiting."
-	
-	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR
-	
-	If _d3d11dev.CreateSamplerState(sd,_linearsamplerstate)<0 Throw "Cannot create linear sampler state~nExiting." 
-	
-	_d3d11devcon.IASetInputLayout(_max2dlayout)
-	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-	_d3d11devcon.VSSetConstantBuffers(0,1,Varptr _projbuffer)
-	_d3d11devcon.PSSetShader(_texturepixelshader,Null,0)
-	_d3d11devcon.PSSetSamplers(0,1,Varptr _pointsamplerstate)
-	_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-
-	'pre-defined blend states
-	Local _bd:D3D11_BLEND_DESC = New D3D11_BLEND_DESC
-	
-	'Solid blend
-	_bd.IndependentBlendEnable = True
-	_bd.RenderTarget0_BlendEnable = False
-	_bd.RenderTarget0_SrcBlend = D3D11_BLEND_ONE
-	_bd.RenderTarget0_DestBlend = D3D11_BLEND_ZERO
-	_bd.RenderTarget0_BlendOp = D3D11_BLEND_OP_ADD
-	_bd.RenderTarget0_SrcBlendAlpha = D3D11_BLEND_ONE
-	_bd.RenderTarget0_DestBlendAlpha = D3D11_BLEND_ZERO
-	_bd.RenderTarget0_BlendOpAlpha = D3D11_BLEND_OP_ADD
-	_bd.RenderTarget0_RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL
-	_d3d11dev.CreateBlendState(_bd,_solidblend)
-	
-	'Mask blend
-	_bd.RenderTarget0_BlendEnable = False
-	_d3d11dev.CreateBlendState(_bd,_maskblend)
-
-	'Alpha blend
-	_bd.RenderTarget0_BlendEnable = True
-	_bd.RenderTarget0_SrcBlend = D3D11_BLEND_SRC_ALPHA
-	_bd.RenderTarget0_DestBlend = D3D11_BLEND_INV_SRC_ALPHA
-	_d3d11dev.CreateBlendState(_bd,_alphablend)
-	
-	'Light blend
-	_bd.RenderTarget0_BlendEnable = True
-	_bd.RenderTarget0_SrcBlend = D3D11_BLEND_SRC_ALPHA
-	_bd.RenderTarget0_DestBlend = D3D11_BLEND_ONE
-	_d3d11dev.CreateBlendState(_bd,_lightblend)
-
-	'Shade blend
-	_bd.RenderTarget0_BlendEnable = True
-	_bd.RenderTarget0_SrcBlend = D3D11_BLEND_ZERO
-	_bd.RenderTarget0_DestBlend = D3D11_BLEND_SRC_COLOR
-	_d3d11dev.CreateBlendState(_bd,_shadeblend)
-
-	_currblend = SOLIDBLEND
-	_currentrtv = _d3d11Graphics.GetRenderTarget()
-	
-	_shaderready = True
-	Return True
-EndFunction
-
-Function FreeD3D11Max2DResources()
-	FreeBatchResources()
-	'FreeBumpResources()
-	'FreeShadowResources()
-	'FreeLightingResources()
-
-	SAFE_RELEASE(_vertexshader) '
-	SAFE_RELEASE(_texturepixelshader)
-	SAFE_RELEASE(_colorpixelshader)
-	SAFE_RELEASE(_max2dlayout) '
-	SAFE_RELEASE(_vertexbuffer)
-	SAFE_RELEASE(_pointsamplerstate)
-	SAFE_RELEASE(_linearsamplerstate)
-	SAFE_RELEASE(_psfbuffer)
-	SAFE_RELEASE(_polyBuffer)
-	SAFE_RELEASE(_pointbuffer)
-	SAFE_RELEASE(_ovalbuffer)
-	SAFE_RELEASE(_projbuffer)
-	SAFE_RELEASE(_solidblend)
-	SAFE_RELEASE(_maskblend)
-	SAFE_RELEASE(_alphablend)
-	SAFE_RELEASE(_lightblend)
-	SAFE_RELEASE(_shadeblend)
-	
-	If _ringbuffer _ringbuffer.Destroy
-	
-	_currentsrv = Null
-	_shaderready = False
-EndFunction
 
 Public
 
@@ -432,7 +96,6 @@ Type TD3D11ImageFrame Extends TImageFrame
 	Field _seq
 
 	Method Create:TImageFrame(pixmap:TPixmap,flags)
-		If Not _shaderready Return
 		If Not _TD3D11ImageFrameList _TD3D11ImageFrameList = New TList
 	
 		Local width#=pixmap.width
@@ -481,7 +144,7 @@ Type TD3D11ImageFrame Extends TImageFrame
 		
 		Local bind = D3D11_BIND_SHADER_RESOURCE
 		If Not mipmapped
-			If flags&RENDERIMAGE bind = bind|D3D11_BIND_RENDER_TARGET
+		'	If flags&RENDERIMAGE bind = bind|D3D11_BIND_RENDER_TARGET
 		EndIf
 
 		desc.BindFlags = bind
@@ -506,23 +169,23 @@ Type TD3D11ImageFrame Extends TImageFrame
 		EndIf
 		
 		If Not mipmapped
-			If (flags&RENDERIMAGE)
-				If _d3d11dev.CreateRenderTargetView(_tex2D,Null,_rtv)<0
-					WriteStdout "Cannot use texture as a Render Texture~n"
-					Return
-				Else
+			'If (flags&RENDERIMAGE)
+			'	If _d3d11dev.CreateRenderTargetView(_tex2D,Null,_rtv)<0
+			'		WriteStdout "Cannot use texture as a Render Texture~n"
+			'		Return
+			'	Else
 					'Created OK so clear the allocated memory
-					_d3d11devcon.ClearRenderTargetView(_rtv,[0.0,0.0,0.0,0.0])
-				EndIf
-			EndIf
+			'		_d3d11devcon.ClearRenderTargetView(_rtv,[0.0,0.0,0.0,0.0])
+			'	EndIf
+			'EndIf
 		EndIf
 		
 		_seq=GraphicsSeq
 		
 		If flags&FILTEREDIMAGE
-			_sampler = _linearsamplerstate
+			_sampler = TD3D11Max2DDriver._linearsamplerstate
 		Else
-			_sampler = _pointsamplerstate
+			_sampler = TD3D11Max2DDriver._pointsamplerstate
 		EndIf
 		
 		_TD3D11ImageFrameList.AddLast Self
@@ -536,31 +199,29 @@ Type TD3D11ImageFrame Extends TImageFrame
 	EndMethod
 
 	Method Draw( x0#,y0#,x1#,y1#,tx#,ty#,sx#,sy#,sw#,sh# )
-		If Not _shaderready Return
-
 		Local u0#=sx*_uscale
 		Local v0#=sy*_vscale
 		Local u1#=(sx+sw)*_uscale
 		Local v1#=(sy+sh)*_vscale
 		Local _verts#[16]
 		
-		_verts[0]=x0*_ix+y0*_iy+tx
-		_verts[1]=x0*_jx+y0*_jy+ty
+		_verts[0]=x0*TD3D11Max2DDriver._ix+y0*TD3D11Max2DDriver._iy+tx
+		_verts[1]=x0*TD3D11Max2DDriver._jx+y0*TD3D11Max2DDriver._jy+ty
 		_verts[2]=u0
 		_verts[3]=v0
 
-		_verts[4]=x1*_ix+y0*_iy+tx
-		_verts[5]=x1*_jx+y0*_jy+ty
+		_verts[4]=x1*TD3D11Max2DDriver._ix+y0*TD3D11Max2DDriver._iy+tx
+		_verts[5]=x1*TD3D11Max2DDriver._jx+y0*TD3D11Max2DDriver._jy+ty
 		_verts[6]=u1
 		_verts[7]=v0
 
-		_verts[8]=x0*_ix+y1*_iy+tx
-		_verts[9]=x0*_jx+y1*_jy+ty
+		_verts[8]=x0*TD3D11Max2DDriver._ix+y1*TD3D11Max2DDriver._iy+tx
+		_verts[9]=x0*TD3D11Max2DDriver._jx+y1*TD3D11Max2DDriver._jy+ty
 		_verts[10]=u0
 		_verts[11]=v1
 		
-		_verts[12]=x1*_ix+y1*_iy+tx
-		_verts[13]=x1*_jx+y1*_jy+ty
+		_verts[12]=x1*TD3D11Max2DDriver._ix+y1*TD3D11Max2DDriver._iy+tx
+		_verts[13]=x1*TD3D11Max2DDriver._jx+y1*TD3D11Max2DDriver._jy+ty
 		_verts[14]=u1
 		_verts[15]=v1
 
@@ -571,32 +232,58 @@ Type TD3D11ImageFrame Extends TImageFrame
 		'Local offset = _ringBuffer.Allocate(_verts)
 		'_d3d11devcon.IASetVertexBuffers(0,1,Varptr _ringbuffer._buffer,Varptr stride,Varptr offset)
 		
-		MapBuffer(_vertexbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_verts,SizeOf(_verts))
+		TD3D11Max2DDriver.MapBuffer(TD3D11Max2DDriver._vertexbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_verts,SizeOf(_verts))
 
-		_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-		_d3d11devcon.PSSetShader(_texturepixelshader,Null,0)
+		_d3d11devcon.VSSetShader(TD3D11Max2DDriver._vertexshader,Null,0)
+		_d3d11devcon.PSSetShader(TD3D11Max2DDriver._texturepixelshader,Null,0)
 
 		_d3d11devcon.PSSetSamplers(0,1,Varptr _sampler)
 		_d3d11devcon.PSSetShaderResources(0,1,Varptr _srv)
-		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
+		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr TD3D11Max2DDriver._psfbuffer)
 		
-		_d3d11devcon.IASetInputLayout(_max2dlayout)
-		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _vertexbuffer,Varptr stride,Varptr offset)
+		_d3d11devcon.IASetInputLayout(TD3D11Max2DDriver._max2dlayout)
+		_d3d11devcon.IASetVertexBuffers(0,1,Varptr TD3D11Max2DDriver._vertexbuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP)
 		_d3d11devcon.Draw(4,0)
 	EndMethod
 EndType
 
-Type TD3D11Max2DDriver Extends TMax2DDriver
-	Field _t:TMax2DGraphics
-	Field _clscolor#[] = [0.0,0.0,0.0,1.0]
-	Field _ix#,_iy#,_jx#,_jy#, _linewidth#, 
-	Field _width#,_height#
-	Field _currblend
+Type TD3D11Max2DDriver Extends TMax2DDriver	
+	Global _pointbuffer:ID3D11Buffer, _linebuffer:ID3D11Buffer, _projbuffer:ID3D11Buffer, _tilebuffer:ID3D11Buffer
+	Global _pointarray#[], _polyarray#[], _ovalarray#[], _linearray#[], _tilearray#[]
 	
-	Field _solidblend:ID3D11BlendState, _maskblend:ID3D11BlendState, _alphablend:ID3D11BlendState, 
-	Field _lightblend:ID3D11BlendState, _shadeblend:ID3D11BlendState
+	Global _vertexshader:ID3D11VertexShader
+	Global _texturepixelshader:ID3D11PixelShader
+	Global _colorpixelshader:ID3D11PixelShader
+	Global _max2dlayout:ID3D11InputLayout
+	Global _currentbuffer:ID3D11Buffer, _vertexbuffer:ID3D11Buffer, _psfbuffer:ID3D11Buffer, _polybuffer:ID3D11Buffer, _ovalbuffer:ID3D11Buffer
 	
+	Global _clscolor#[] = [0.0,0.0,0.0,1.0]
+	Global _ix#,_iy#,_jx#,_jy#, _linewidth#
+	
+	Global _max2dshaders:TD3D11Max2DShaders
+	Global _currentrtv:ID3D11RenderTargetView
+	Global _driver:TD3D11Max2DDriver
+	Global _d3d11graphics:TD3D11Graphics
+	Global _max2DGraphics:TMax2DGraphics
+	Global _width#,_height#
+	Global _currblend
+	
+	Global _shaderready
+	Global _currentshader:ID3D11PixelShader
+	Global _currentsrv:ID3D11ShaderResourceView
+	Global _currentsampler:ID3D11SamplerState
+	Global _pointsamplerstate:ID3D11SamplerState
+	Global _linearsamplerstate:ID3D11SamplerState
+	Global _rs:ID3D11RasterizerState
+	Global _psflags#[8]
+	Global _matrixproj#[16]
+	Global _ringbuffer:TD3D11RingBuffer
+	
+
+	Global _solidblend:ID3D11BlendState, _maskblend:ID3D11BlendState, _alphablend:ID3D11BlendState
+	Global _lightblend:ID3D11BlendState, _shadeblend:ID3D11BlendState
+
 	Method ToString$()
 		Local Feature$
 		Local FeatureLevel = _d3d11dev.GetFeatureLevel()
@@ -633,7 +320,7 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	
 	Method SetGraphics( g:TGraphics )
 		If Not g
-			FreeD3D11Max2DResources
+			Free
 			
 			If _TD3D11ImageFrameList
 				For Local frame:TD3D11ImageFrame = EachIn _TD3D11ImageFrameList
@@ -668,8 +355,8 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		D3D11GraphicsDriver().SetGraphics _d3d11Graphics
 		_currentrtv = _d3d11graphics.GetRenderTarget()
 
-		CreateD3D11Max2DResources
-
+		Init
+		
 		_max2DGraphics.MakeCurrent
 
 		_width = GraphicsWidth()
@@ -724,17 +411,17 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		Local g = Max(Min(green,255),0)
 		Local b = Max(Min(blue,255),0)
 		
-		_psflags[0] = OneOver255 *  r
-		_psflags[1] = OneOver255 *  g
-		_psflags[2] = OneOver255 *  b
+		_psflags[0] = OneOver255 *  red
+		_psflags[1] = OneOver255 *  green
+		_psflags[2] = OneOver255 *  blue
 		
 		MapBuffer(_psfbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_psflags,SizeOf(_psflags))
 	EndMethod
 
 	Method SetClsColor( red,green,blue )
-		_clscolor[0] = OneOver255 * r
-		_clscolor[1] = OneOver255 * g
-		_clscolor[2] = OneOver255 * b
+		_clscolor[0] = OneOver255 * red
+		_clscolor[1] = OneOver255 * green
+		_clscolor[2] = OneOver255 * blue
 	EndMethod
 
 	Method SetViewport( x,y,width,height )
@@ -1111,14 +798,292 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		If Not D3D11GraphicsDriver() Return Null
 		Return Self
 	EndMethod
+	
+	Function Init()
+		If _shaderready Return
+		
+		If Not _max2dshaders _max2dshaders = New TD3D11Max2DShaders
+	
+	_ringbuffer:TD3D11RingBuffer = New TD3D11RingBuffer.Create()
+		
+ 	Local dsdesc:D3D11_DEPTH_STENCIL_DESC =  New D3D11_DEPTH_STENCIL_DESC
+	dsdesc.DepthEnable=False
+	dsdesc.StencilEnable=False
+	Local dsstate:ID3D11DepthStencilState
+
+	If _d3d11dev.CreateDepthStencilState(dsdesc,dsstate)<0
+		WriteStdout "Cannot create depth stencil state~n"
+		Return
+	EndIf
+	
+	_d3d11devcon.OMSetDepthStencilState(dsstate,0)
+	_d3d11graphics.AddRelease dsstate
+
+	'rasterizer state
+	Local rsdesc:D3D11_RASTERIZER_DESC = New D3D11_RASTERIZER_DESC
+	rsdesc.Fillmode = D3D11_FILL_SOLID
+	rsdesc.CullMode = D3D11_CULL_NONE
+	rsdesc.ScissorEnable = True
+
+	If _d3d11dev.CreateRasterizerState(rsdesc,_rs)<0
+		WriteStdout "Cannot create rasterizer state~n"
+		Return
+	EndIf
+	
+	_d3d11devcon.RSSetScissorRects(1,[0,0,GraphicsWidth(),GraphicsHeight()])
+
+	_d3d11devcon.RSSetState(_rs)
+	_d3d11graphics.AddRelease _rs
+	
+	'create shaders
+	Local hr
+	Local vscode:ID3DBlob
+	Local pscode:ID3DBlob
+	Local pErrorMsg:ID3DBlob
+	
+	'create vertex shader
+	hr = D3DCompile(_max2dshaders._max2Dvs,_max2dshaders._max2Dvs.length,Null,Null,Null,"StandardVertexShader","vs_4_0",..
+							D3D11_SHADER_OPTIMIZATION_LEVEL3,0,vscode,pErrorMsg)
+	If pErrorMsg
+		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
+		WriteStdout String.fromCString(_ptr)
+		
+		SAFE_RELEASE(pErrorMsg)
+	EndIf
+		
+	If hr<0
+			WriteStdout "Cannot compile vertex shader source code~n"
+			Return
+	EndIf
+
+	If _d3d11dev.CreateVertexShader(vscode.GetBufferPointer(),vscode.GetBufferSize(),Null,_vertexshader)<0
+		WriteStdout "Cannot create vertex shader - compiled ok~n"
+		Return
+	EndIf
+	
+	'create input layout for the vertex shader
+	Local polyLayout[] = [	0,0,DXGI_FORMAT_R32G32_FLOAT,0,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_VERTEX_DATA,0,..
+							0,0,DXGI_FORMAT_R32G32_FLOAT,0,D3D11_APPEND_ALIGNED_ELEMENT,D3D11_INPUT_PER_VERTEX_DATA,0]
+	
+	polyLayout[0] = Int("POSITION".ToCString())
+	polyLayout[7] = Int("TEXCOORD".ToCString())
+	
+	hr = _d3d11dev.CreateInputLayout(polyLayout,2,vscode.GetBufferPointer(),vscode.GetBuffersize(),_max2dlayout)
+	
+	MemFree Byte Ptr(Int(polyLayout[0]))
+	MemFree Byte Ptr(Int(polyLayout[7]))
+	
+	If hr<0
+		WriteStdout "Cannot create shader input layout~n"
+		Return
+	EndIf
+
+	'create texture pixel shader
+	hr = D3DCompile(_max2dshaders._max2Dps,_max2dshaders._max2Dps.length,Null,Null,Null,"TexturePixelShader","ps_4_0",..
+								D3D11_SHADER_OPTIMIZATION_LEVEL3,0,pscode,pErrorMsg)
+									
+	If pErrorMsg
+		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
+		WriteStdout String.fromCString(_ptr)
+			
+		SAFE_RELEASE(pErrorMsg)
+	EndIf
+	If hr<0
+		Throw "Cannot compile pixel shader source code for texturing!~nShutting down."
+	EndIf
+
+	If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_texturepixelshader)<0
+		Throw "Cannot create pixel shader for texturing - compiled ok~n"
+	EndIf
+	
+	'create color pixel shader
+	hr = D3DCompile(_max2dshaders._max2Dps,_max2dshaders._max2Dps.length,Null,Null,Null,"ColorPixelShader","ps_4_0",..
+								D3D11_SHADER_OPTIMIZATION_LEVEL3,0,pscode,pErrorMsg)
+									
+	If pErrorMsg
+		Local _ptr:Byte Ptr = pErrorMsg.GetBufferPointer()
+		WriteStdout String.fromCString(_ptr)
+			
+		SAFE_RELEASE(pErrorMsg)
+	EndIf
+	If hr<0 Throw "Cannot compile pixel shader source code for coloring!~nShutting down."
+	
+	If _d3d11dev.CreatePixelShader(pscode.GetBufferPointer(),pscode.GetBufferSize(),Null,_colorpixelshader)<0 Throw "Cannot create pixel shader for coloring - compiled ok~n"
+
+	'release blobs
+	SAFE_RELEASE(vscode)
+	SAFE_RELEASE(pscode)
+	SAFE_RELEASE(pErrorMsg)			'Should NEVER need this if we actually get here
+	
+	'create vertex buffer
+	CreateBuffer(_vertexbuffer,64,D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,Null,"Vertex Buffer")	
+
+	'matrix buffer for orthogonal matrix
+	_matrixproj = New Float[16]
+	CreateBuffer(_projbuffer,64,D3D11_USAGE_DYNAMIC,D3D11_BIND_CONSTANT_BUFFER,D3D11_CPU_ACCESS_WRITE,_matrixproj,"Matrix Buffer")
+	
+	'create buffer for pixel shader flags
+	_psflags = [1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0]
+	CreateBuffer(_psfbuffer,32,D3D11_USAGE_DYNAMIC,D3D11_BIND_CONSTANT_BUFFER,D3D11_CPU_ACCESS_WRITE,_psflags,"Pixel Shader Flags Buffer")
+	
+	'create texture sampler states
+	Local sd:D3D11_SAMPLER_DESC = New D3D11_SAMPLER_DESC
+	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT
+	sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP
+	sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP
+	sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP
+	sd.MipLODBias = 0.0
+	sd.MaxAnisotropy = 1
+	sd.ComparisonFunc = D3D11_COMPARISON_GREATER_EQUAL
+	sd.BorderColor0 = 0.0
+	sd.BorderColor1 = 0.0
+	sd.BorderColor2 = 0.0
+	sd.BorderColor3 = 0.0
+	sd.MinLOD = 0.0
+	sd.MaxLOD = D3D11_FLOAT32_MAX
+
+	If _d3d11dev.CreateSamplerState(sd,_pointsamplerstate)<0 Throw "Cannot create point sampler state~nExiting."
+	
+	sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR
+	
+	If _d3d11dev.CreateSamplerState(sd,_linearsamplerstate)<0 Throw "Cannot create linear sampler state~nExiting." 
+	
+	_d3d11devcon.IASetInputLayout(_max2dlayout)
+	_d3d11devcon.VSSetShader(_vertexshader,Null,0)
+	_d3d11devcon.VSSetConstantBuffers(0,1,Varptr _projbuffer)
+	_d3d11devcon.PSSetShader(_texturepixelshader,Null,0)
+	_d3d11devcon.PSSetSamplers(0,1,Varptr _pointsamplerstate)
+	_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
+		
+		'pre-defined blend states
+		Local _bd:D3D11_BLEND_DESC = New D3D11_BLEND_DESC
+		
+		'Solid blend
+		_bd.IndependentBlendEnable = True
+		_bd.RenderTarget0_BlendEnable = False
+		_bd.RenderTarget0_SrcBlend = D3D11_BLEND_ONE
+		_bd.RenderTarget0_DestBlend = D3D11_BLEND_ZERO
+		_bd.RenderTarget0_BlendOp = D3D11_BLEND_OP_ADD
+		_bd.RenderTarget0_SrcBlendAlpha = D3D11_BLEND_ONE
+		_bd.RenderTarget0_DestBlendAlpha = D3D11_BLEND_ZERO
+		_bd.RenderTarget0_BlendOpAlpha = D3D11_BLEND_OP_ADD
+		_bd.RenderTarget0_RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL
+		_d3d11dev.CreateBlendState(_bd,_solidblend)
+		
+		'Mask blend
+		_bd.RenderTarget0_BlendEnable = False
+		_d3d11dev.CreateBlendState(_bd,_maskblend)
+		
+		'Alpha blend
+		_bd.RenderTarget0_BlendEnable = True
+		_bd.RenderTarget0_SrcBlend = D3D11_BLEND_SRC_ALPHA
+		_bd.RenderTarget0_DestBlend = D3D11_BLEND_INV_SRC_ALPHA
+		_d3d11dev.CreateBlendState(_bd,_alphablend)
+		
+		'Light blend
+		_bd.RenderTarget0_BlendEnable = True
+		_bd.RenderTarget0_SrcBlend = D3D11_BLEND_SRC_ALPHA
+		_bd.RenderTarget0_DestBlend = D3D11_BLEND_ONE
+		_d3d11dev.CreateBlendState(_bd,_lightblend)
+		
+		'Shade blend
+		_bd.RenderTarget0_BlendEnable = True
+		_bd.RenderTarget0_SrcBlend = D3D11_BLEND_ZERO
+		_bd.RenderTarget0_DestBlend = D3D11_BLEND_SRC_COLOR
+		_d3d11dev.CreateBlendState(_bd,_shadeblend)
+		
+		_currblend = SOLIDBLEND
+		_currentrtv = _d3d11Graphics.GetRenderTarget()
+		
+		_shaderready = True
+	End Function
+	
+	Function Free()
+		If Not _shaderready Return
+		SAFE_RELEASE(_psfbuffer)
+		SAFE_RELEASE(_polyBuffer)
+		SAFE_RELEASE(_pointbuffer)
+		SAFE_RELEASE(_ovalbuffer)
+		SAFE_RELEASE(_projbuffer)
+		SAFE_RELEASE(_solidblend)
+		SAFE_RELEASE(_maskblend)
+		SAFE_RELEASE(_alphablend)
+		SAFE_RELEASE(_lightblend)
+		SAFE_RELEASE(_shadeblend)
+		
+		SAFE_RELEASE(_vertexshader) '
+		SAFE_RELEASE(_texturepixelshader)
+		SAFE_RELEASE(_colorpixelshader)
+		SAFE_RELEASE(_max2dlayout) '
+		SAFE_RELEASE(_vertexbuffer)
+		SAFE_RELEASE(_pointsamplerstate)
+		SAFE_RELEASE(_linearsamplerstate)
+		
+		If _ringbuffer _ringbuffer.Destroy
+		_currentsrv = Null
+		
+		_shaderready = False
+	End Function
+		
+	Function CreateBuffer(Buffer:ID3D11Buffer Var,ByteWidth,Usage,BindFlags,CPUAccessFlags,Data:Byte Ptr=Null,Name$="")
+		Local SubResourceData:D3D11_SUBRESOURCE_DATA
+		Local hr
+	
+		Local Desc:D3D11_BUFFER_DESC = New D3D11_BUFFER_DESC	
+		Desc.ByteWidth = ByteWidth
+		Desc.Usage = Usage
+		Desc.BindFlags = BindFlags
+		Desc.CPUAccessFlags = CPUAccessFlags
+	
+		If Data
+			SubResourceData = New D3D11_SUBRESOURCE_DATA
+			SubResourceData.pSysMem = Data
+			
+			hr =  _d3d11dev.CreateBuffer(Desc,SubResourceData,Buffer)
+		Else
+			hr = _d3d11dev.CreateBuffer(Desc,Null,Buffer)
+		EndIf
+		
+		If hr<0
+			WriteStdout "Cannot create buffer for : "+Name+"~n"
+			Return -1
+		Else
+			Return True
+		EndIf
+	EndFunction
+	
+	Function MapBuffer(Buffer:ID3D11Buffer Var,SubresourceIndex,MapType,MapFlags,Data:Byte Ptr,Size,Name$="")
+		If Not Buffer Return
+	
+		Local Map:D3D11_MAPPED_SUBRESOURCE = New D3D11_MAPPED_SUBRESOURCE
+	
+		If _d3d11devcon.Map(Buffer,SubresourceIndex,MapType,MapFlags,Map)<0
+			Throw "Error! "+Name+"~nCannot map data for resources!~n"
+		Else
+			'For Local i = 0 Until Size
+			'	Map.pData[i] = Data[i]
+			'Next
+			MemCopy Map.pData,Data,Size
+			_d3d11devcon.UnMap(Buffer,SubresourceIndex)
+		EndIf
+		Return True
+	EndFunction
+	
+	Function EnableAlphaTest()
+		If _psflags[4] = 1.0 Return
+		_psflags[4] = 1.0
+		MapBuffer(_psfbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_psflags,SizeOf(_psflags))
+	EndFunction
+	
+	Function DisableAlphaTest()
+		If _psflags[4] = 0.0 Return
+		_psflags[4] = 0.0
+		MapBuffer(_psfbuffer,0,D3D11_MAP_WRITE_DISCARD,0,_psflags,SizeOf(_psflags))
+	EndFunction
 EndType
 
 Function D3D11Max2DDriver:TD3D11Max2DDriver()
-	Global _done
-	If Not _done
-		_driver=New TD3D11Max2DDriver.Create()
-		_done=True
-	EndIf
+	Global _driver:TD3D11Max2DDriver=New TD3D11Max2DDriver
 	Return _driver
 End Function
 

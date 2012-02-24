@@ -13,6 +13,8 @@ Import "batchimage.bmx"
 Import "buffers.bmx"
 Import "shaders.bmx"
 
+Const RENDERIMAGE = $10
+
 Type TMax2DExDriver Extends TMax2DDriver
 	Field _parent:TMax2DDriver	
 	Field _current:TGraphics

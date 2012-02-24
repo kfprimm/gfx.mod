@@ -1,22 +1,11 @@
+
 Strict
 
-Module GFX.D3D11Graphics
-
-ModuleInfo "Version: V1.0"
-ModuleInfo "Author: Dave Camp"
-ModuleInfo "License: SRS Shared Source Code License"
-ModuleInfo "Copyright: SRS Software"
-ModuleInfo ""
-ModuleInfo "BUGFIXES:"
-ModuleInfo "Fixed render lag for window and fullscreen"
-ModuleInfo "Fixed crash when exiting from fullscreen then using another DX driver"
- 
 Import BRL.Graphics
 Import BRL.LinkedList
 Import BRL.Retro
 Import GFX.DirectXEx
 
-?Win32
 Private
 'Lag fix
 Global _DwmapiDLL = LoadLibraryA("dwmapi.dll")
@@ -574,3 +563,4 @@ Function D3D11ShowAllSupportedFeatures(InFormat=0)
 	If InFormat CheckDataFormat(InFormat)
 EndFunction
 ?
+

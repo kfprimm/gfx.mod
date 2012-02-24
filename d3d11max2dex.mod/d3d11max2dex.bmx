@@ -7,13 +7,26 @@ ModuleInfo "License: MIT"
 ModuleInfo "Credit: Code derived from SRS.D3D11Max2D"
 
 Import GFX.Max2DEx
-Import GFX.DirectXEx
+Import GFX.D3D11Max2D
 
 Incbin "batch.vs"
 Incbin "batch.ps"
 
 ?Win32
 
+Private
+
+Function SAFE_RELEASE(interface:IUnknown Var)
+	If interface interface.Release_
+	interface = Null
+EndFunction
+
+Global _d3d11dev:ID3D11Device
+Global _d3d11devcon:ID3D11DeviceContext
+
+Public
+
+Rem
 Type TD3D11BatchImage Extends TBatchImage
 	Global _gvshader:ID3D11VertexShader[32]
 	Global _gpshader:ID3D11PixelShader
@@ -26,10 +39,10 @@ Type TD3D11BatchImage Extends TBatchImage
 	
 	Function FreeResources()
 		For Local i = 0 Until 32
-			SAFE_RELEASE(_vshader[i])
+			SAFE_RELEASE(_gvshader[i])
 		Next
-		SAFE_RELEASE(_pshader)
-		SAFE_RELEASE(_layout)
+		SAFE_RELEASE(_gpshader)
+		SAFE_RELEASE(_glayout)
 	End Function
 
 	Field _readytodraw
@@ -58,9 +71,7 @@ Type TD3D11BatchImage Extends TBatchImage
 	
 	Method Create:TBatchImage(image:TImage,color,rotation,scale,uv,frames)
 		If Not _shaderready Return
-		
-		If Not _BIG _BIG = New TBatchImageGlobals
-		
+				
 		Local iframe:TD3D11ImageFrame = TD3D11ImageFrame(image.Frame(0))
 		If iframe = Null Return
 		
@@ -73,10 +84,7 @@ Type TD3D11BatchImage Extends TBatchImage
 		texDesc.ArraySize = _numframes
 		texDesc.Usage = D3D11_USAGE_DEFAULT
 
-		If _d3d11dev.CreateTexture2D(texDesc,Null,_tex)<0
-			Notify "Error!~nCannot create instancing texture array.~nExiting.",True
-			End
-		EndIf
+		If _d3d11dev.CreateTexture2D(texDesc,Null,_tex)<0 Throw "Cannot create instancing texture array."
 
 		For Local i = 0 Until _numframes
 			Local iframe:TD3D11ImageFrame = TD3D11ImageFrame(image.Frame(i))
@@ -366,89 +374,110 @@ Type TD3D11BatchImage Extends TBatchImage
 		SAFE_RELEASE(_uvbuffer)
 	EndMethod
 End Type
+End Rem
 
 Type TD3D11Buffer Extends TBuffer
 	Field _rtv:ID3D11RenderTargetView
 End Type
 
 Type THLSL11Driver Extends TShaderDriver
-  
+	Method Compile:TShaderCode(code:TShaderCode)
+	End Method
+	Method Apply(res:Object, data:Object)
+	End Method
+	Method Name$()
+	End Method
 End Type
 
 Type TD3D11Max2DExDriver Extends TMax2DExDriver
+	Field _t:TMax2DGraphics
+	
+	Method SetGraphics(g:TGraphics)
+		_t = TMax2DGraphics(g)
+		If _t
+			Local dg:TD3D11Graphics = TD3D11Graphics(_t._graphics)
+			If dg
+				_d3d11dev = dg.GetDirect3DDevice()
+				_d3d11devcon = dg.GetDirect3DDeviceContext()
+			EndIf
+		EndIf
+
+		Return Super.SetGraphics(g)
+	End Method
+	
 	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False)
-    Return New TD3D11BatchImage.Create(image,color,rotation,scale,uv,frames)
+    'Return New TD3D11BatchImage.Create(image,color,rotation,scale,uv,frames)
 	End Method
 
 	Method PlotPoints(points#[])
 		If points.length<2 Or (points.length&1) Return
 	
 		Local buildbuffer = False
-		Local ox#=_max2DGraphics.origin_x
-		Local oy#=_max2DGraphics.origin_y
+		Local ox#=_t.origin_x
+		Local oy#=_t.origin_y
 	
-		If _pointarray.length <> points.length*2
+		If TD3D11Max2DDriver._pointarray.length <> points.length*2
 			'BUG FIX - Causes intermittent EAV if removed!
 			'Only when array size is changed every frame
-			_pointarray = Null
+			TD3D11Max2DDriver._pointarray = Null
 			GCCollect()
 		
-			_pointarray = _pointarray[..points.length*2]
+			TD3D11Max2DDriver._pointarray = TD3D11Max2DDriver._pointarray[..points.length*2]
 			buildbuffer = True
 		EndIf
 
 		Local i
 		Repeat
-			_pointarray[i*4+0] = points[i*2+0] + ox
-			_pointarray[i*4+1] = points[i*2+1] + oy
+			TD3D11Max2DDriver._pointarray[i*4+0] = points[i*2+0] + ox
+			TD3D11Max2DDriver._pointarray[i*4+1] = points[i*2+1] + oy
 
 			i:+1
 		Until i = points.length*0.5
 
 		If Not buildbuffer
-			MapBuffer(_pointBuffer,0,D3D11_MAP_WRITE_DISCARD,0,_pointarray,SizeOf(_pointarray))
+			TD3D11Max2DDriver.MapBuffer(TD3D11Max2DDriver._pointBuffer,0,D3D11_MAP_WRITE_DISCARD,0,TD3D11Max2DDriver._pointarray,SizeOf(TD3D11Max2DDriver._pointarray))
 		Else
-			SAFE_RELEASE(_pointBuffer)
-			CreateBuffer(_pointbuffer,SizeOf(_pointarray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_pointarray,"Point Array")
+			SAFE_RELEASE(TD3D11Max2DDriver._pointBuffer)
+			TD3D11Max2DDriver.CreateBuffer(TD3D11Max2DDriver._pointbuffer,SizeOf(TD3D11Max2DDriver._pointarray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,TD3D11Max2DDriver._pointarray,"Point Array")
 		EndIf		
 
 		Local stride=16
 		Local offset=0
 	
-		_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-		_d3d11devcon.PSSetShader(_colorpixelshader,Null,0)
-		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-		_d3d11devcon.IASetInputLayout(_max2dlayout)
-		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _pointBuffer,Varptr stride,Varptr offset)
+		_d3d11devcon.VSSetShader(TD3D11Max2DDriver._vertexshader,Null,0)
+		_d3d11devcon.PSSetShader(TD3D11Max2DDriver._colorpixelshader,Null,0)
+		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr TD3D11Max2DDriver._psfbuffer)
+		_d3d11devcon.IASetInputLayout(TD3D11Max2DDriver._max2dlayout)
+		_d3d11devcon.IASetVertexBuffers(0,1,Varptr TD3D11Max2DDriver._pointBuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST)
 		_d3d11devcon.Draw(points.length*0.5,0)
 	End Method
 
-	Method DrawLines(lines#[], )
+	Method DrawLines(lines#[], linked)
 		If lines.length<4 Or (lines.length&1) Return
 	  If linked And (lines.length Mod 4) Return
 	
 	  Local buildbuffer = False
 	
-	  Local handlex#=_max2DGraphics.handle_x
-	  Local handley#=_max2DGraphics.handle_y
-	  Local ox#=_max2DGraphics.origin_x
-	  Local oy#=_max2DGraphics.origin_y
+	  Local handlex#=_t.handle_x
+	  Local handley#=_t.handle_y
+	  Local ox#=_t.origin_x
+	  Local oy#=_t.origin_y
 
-	  If _linearray.length <> lines.length*2
+	  If TD3D11Max2DDriver._linearray.length <> lines.length*2
 		  'BUG FIX - Causes intermittent EAV if removed!
 		  'Only when array size is changed every frame
-		  _linearray = Null
+		  TD3D11Max2DDriver._linearray = Null
 		  GCCollect()
 
-		  _linearray = _linearray[..lines.length*2]
+		  TD3D11Max2DDriver._linearray = TD3D11Max2DDriver._linearray[..lines.length*2]
 		  buildbuffer = True
 	  EndIf
 	
 	  Local index = 0	
 	  For Local i = 0 Until lines.length Step 2
-		  _linearray[index] = (handlex+lines[i])*_ix + (handley+lines[i+1])*_iy + ox
-		  _linearray[index+1] = (handlex+lines[i])*_jx + (handley+lines[i+1])*_jy + oy
+		  TD3D11Max2DDriver._linearray[index] = (handlex+lines[i])*TD3D11Max2DDriver._ix + (handley+lines[i+1])*TD3D11Max2DDriver._iy + ox
+		  TD3D11Max2DDriver._linearray[index+1] = (handlex+lines[i])*TD3D11Max2DDriver._jx + (handley+lines[i+1])*TD3D11Max2DDriver._jy + oy
 		  index:+4
 	  Next
 
@@ -456,19 +485,19 @@ Type TD3D11Max2DExDriver Extends TMax2DExDriver
 	  Local offset = 0
 	
 	  If Not buildbuffer
-		  MapBuffer(_linebuffer,0,D3D11_MAP_WRITE_DISCARD,0,_linearray,SizeOf(_linearray))
+		  TD3D11Max2DDriver.MapBuffer(TD3D11Max2DDriver._linebuffer,0,D3D11_MAP_WRITE_DISCARD,0,TD3D11Max2DDriver._linearray,SizeOf(TD3D11Max2DDriver._linearray))
 	  Else
-		  SAFE_RELEASE(_linebuffer)
-		  CreateBuffer(_linebuffer,SizeOf(_linearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_linearray,"Line Array")
+		  SAFE_RELEASE(TD3D11Max2DDriver._linebuffer)
+		  TD3D11Max2DDriver.CreateBuffer(TD3D11Max2DDriver._linebuffer,SizeOf(TD3D11Max2DDriver._linearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,TD3D11Max2DDriver._linearray,"Line Array")
 	  EndIf
 	
-	  _d3d11devcon.VSSetShader(_vertexshader,Null,0)
-	  _d3d11devcon.PSSetShader(_colorpixelshader,Null,0)
-	  _d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-	  _d3d11devcon.IASetInputLayout(_max2dlayout)
+	  _d3d11devcon.VSSetShader(TD3D11Max2DDriver._vertexshader,Null,0)
+	  _d3d11devcon.PSSetShader(TD3D11Max2DDriver._colorpixelshader,Null,0)
+	  _d3d11devcon.PSSetConstantBuffers(0,1,Varptr TD3D11Max2DDriver._psfbuffer)
+	  _d3d11devcon.IASetInputLayout(TD3D11Max2DDriver._max2dlayout)
 	  'LINESTRIP(=3) or LINELIST(=2)
 	  _d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP-(linked=True))
-	  _d3d11devcon.IASetVertexBuffers(0,1,Varptr _linebuffer,Varptr stride,Varptr offset)
+	  _d3d11devcon.IASetVertexBuffers(0,1,Varptr TD3D11Max2DDriver._linebuffer,Varptr stride,Varptr offset)
 	  _d3d11devcon.Draw(lines.length*0.5,0)
 	End Method
 	
@@ -477,16 +506,16 @@ Type TD3D11Max2DExDriver Extends TMax2DExDriver
 
 		Local iw=image.width
 		Local ih=image.height
-		Local ox=_max2DGraphics.viewport_x-iw+1
-		Local oy=_max2DGraphics.viewport_y-ih+1
-		Local tx#=Floor(x+_max2DGraphics.origin_x-image.handle_x)-ox
-		Local ty#=Floor(y+_max2DGraphics.origin_y-image.handle_y)-oy
+		Local ox=_t.viewport_x-iw+1
+		Local oy=_t.viewport_y-ih+1
+		Local tx#=Floor(x+_t.origin_x-image.handle_x)-ox
+		Local ty#=Floor(y+_t.origin_y-image.handle_y)-oy
 
 		If tx>=0 tx=tx Mod iw + ox Else tx=iw - -tx Mod iw + ox
 		If ty>=0 ty=ty Mod ih + oy Else ty=ih - -ty Mod ih + oy
 
-		Local vw=_max2DGraphics.viewport_x+_max2DGraphics.viewport_w
-		Local vh=_max2DGraphics.viewport_y+_max2DGraphics.viewport_h
+		Local vw=_t.viewport_x+_t.viewport_w
+		Local vh=_t.viewport_y+_t.viewport_h
 
 		Local width# = vw - tx
 		Local height# = vh - ty
@@ -498,53 +527,53 @@ Type TD3D11Max2DExDriver Extends TMax2DExDriver
 
 		Local buildbuffer = False
 	
-		If _tilearray.length <> 24*numtiles
+		If TD3D11Max2DDriver._tilearray.length <> 24*numtiles
 			'BUG FIX - Causes intermittent EAV if removed!
 			'Only when array size is changed every frame
-			_tilearray = Null
+			TD3D11Max2DDriver._tilearray = Null
 			GCCollect()
 		
-			_tilearray = _tilearray[..24*numtiles]
+			TD3D11Max2DDriver._tilearray = TD3D11Max2DDriver._tilearray[..24*numtiles]
 			buildbuffer = True
 		EndIf
 	
 		Local ii,jj
 		Local index
-		Local ar#[]=_tilearray
+		Local ar#[]=TD3D11Max2DDriver._tilearray
 		Local u#=iframe._uscale * iw
 		Local v#=iframe._vscale * ih
 	
 		For Local ay = 0 Until ny
 			For Local ax = 0 Until nx
-				_tilearray[index + 0] = tx + ii
-				_tilearray[index + 1] = ty + jj
-				_tilearray[index + 2] = 0.0
-				_tilearray[index + 3] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 0] = tx + ii
+				TD3D11Max2DDriver._tilearray[index + 1] = ty + jj
+				TD3D11Max2DDriver._tilearray[index + 2] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 3] = 0.0
 
-				_tilearray[index + 4] = tx + iw + ii
-				_tilearray[index + 5] = ty + jj
-				_tilearray[index + 6] = u
-				_tilearray[index + 7] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 4] = tx + iw + ii
+				TD3D11Max2DDriver._tilearray[index + 5] = ty + jj
+				TD3D11Max2DDriver._tilearray[index + 6] = u
+				TD3D11Max2DDriver._tilearray[index + 7] = 0.0
 
-				_tilearray[index + 8] = tx + ii
-				_tilearray[index + 9] = ty + ih + jj
-				_tilearray[index + 10] = 0.0
-				_tilearray[index + 11] = v
+				TD3D11Max2DDriver._tilearray[index + 8] = tx + ii
+				TD3D11Max2DDriver._tilearray[index + 9] = ty + ih + jj
+				TD3D11Max2DDriver._tilearray[index + 10] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 11] = v
 			
-				_tilearray[index + 12] = tx + ii
-				_tilearray[index + 13] = ty + ih + jj
-				_tilearray[index + 14] = 0.0
-				_tilearray[index + 15] = v
+				TD3D11Max2DDriver._tilearray[index + 12] = tx + ii
+				TD3D11Max2DDriver._tilearray[index + 13] = ty + ih + jj
+				TD3D11Max2DDriver._tilearray[index + 14] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 15] = v
 			
-				_tilearray[index + 16] = tx + iw + ii
-				_tilearray[index + 17] = ty + jj
-				_tilearray[index + 18] = u
-				_tilearray[index + 19] = 0.0
+				TD3D11Max2DDriver._tilearray[index + 16] = tx + iw + ii
+				TD3D11Max2DDriver._tilearray[index + 17] = ty + jj
+				TD3D11Max2DDriver._tilearray[index + 18] = u
+				TD3D11Max2DDriver._tilearray[index + 19] = 0.0
 
-				_tilearray[index + 20] = tx + iw + ii
-				_tilearray[index + 21] = ty + ih + jj
-				_tilearray[index + 22] = u
-				_tilearray[index + 23] = v
+				TD3D11Max2DDriver._tilearray[index + 20] = tx + iw + ii
+				TD3D11Max2DDriver._tilearray[index + 21] = ty + ih + jj
+				TD3D11Max2DDriver._tilearray[index + 22] = u
+				TD3D11Max2DDriver._tilearray[index + 23] = v
 
 				ii:+image.width
 
@@ -555,22 +584,22 @@ Type TD3D11Max2DExDriver Extends TMax2DExDriver
 		Next
 
 		If Not buildbuffer
-			MapBuffer(_tilebuffer,0,D3D11_MAP_WRITE_DISCARD,0,_tilearray,SizeOf(_tilearray))
+			TD3D11Max2DDriver.MapBuffer(TD3D11Max2DDriver._tilebuffer,0,D3D11_MAP_WRITE_DISCARD,0,TD3D11Max2DDriver._tilearray,SizeOf(TD3D11Max2DDriver._tilearray))
 		Else
-			SAFE_RELEASE(_tilebuffer)
-			CreateBuffer(_tilebuffer,SizeOf(_tilearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,_tilearray,"Tile Array")
+			SAFE_RELEASE(TD3D11Max2DDriver._tilebuffer)
+			TD3D11Max2DDriver.CreateBuffer(TD3D11Max2DDriver._tilebuffer,SizeOf(TD3D11Max2DDriver._tilearray),D3D11_USAGE_DYNAMIC,D3D11_BIND_VERTEX_BUFFER,D3D11_CPU_ACCESS_WRITE,TD3D11Max2DDriver._tilearray,"Tile Array")
 		EndIf
 
 		Local stride = 16
 		Local offset = 0
-		_currentsrv = iframe._srv
+		TD3D11Max2DDriver._currentsrv = iframe._srv
 	
-		_d3d11devcon.VSSetShader(_vertexshader,Null,0)
-		_d3d11devcon.PSSetShader(_texturepixelshader,Null,0)
-		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr _psfbuffer)
-		_d3d11devcon.IASetInputLayout(_max2dlayout)
+		_d3d11devcon.VSSetShader(TD3D11Max2DDriver._vertexshader,Null,0)
+		_d3d11devcon.PSSetShader(TD3D11Max2DDriver._texturepixelshader,Null,0)
+		_d3d11devcon.PSSetConstantBuffers(0,1,Varptr TD3D11Max2DDriver._psfbuffer)
+		_d3d11devcon.IASetInputLayout(TD3D11Max2DDriver._max2dlayout)
 		_d3d11devcon.PSSetShaderResources(0,1,Varptr iframe._srv)
-		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _tilebuffer,Varptr stride,Varptr offset)
+		_d3d11devcon.IASetVertexBuffers(0,1,Varptr TD3D11Max2DDriver._tilebuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 
 		_d3d11devcon.Draw(6*numtiles,0)
@@ -591,9 +620,9 @@ Type TD3D11Max2DExDriver Extends TMax2DExDriver
 		_currentbuffer=buffer		
 		Local rtv:ID3D11RenderTargetView
 		If _currentbuffer <> _backbuffer
-		  rtv = _currentbuffer._rtv
+		  rtv = TD3D11Buffer(_currentbuffer)._rtv
 		Else
-		  rtv = _d3d11Graphics.GetRenderTarget()
+		  rtv = TD3D11Graphics(_t._graphics).GetRenderTarget()
 		EndIf
 		_d3d11devcon.OMSetRenderTargets(1,Varptr rtv,Null)
 	End Method	
@@ -605,7 +634,7 @@ End Rem
 Function D3D11Max2DExDriver:TD3D11Max2DExDriver()
 	If D3D11Max2DDriver()
 		Global driver:TD3D11Max2DExDriver=New TD3D11Max2DExDriver
-		driver._parent=D3D11Max2DDriver()
+		driver._parent = D3D11Max2DDriver()
 		Return driver
 	End If
 End Function

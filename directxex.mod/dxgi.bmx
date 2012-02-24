@@ -232,7 +232,7 @@ Type IDXGIObject Extends IUnknown
 	Method SetPrivateData(Name:Byte Ptr,DataSize,pData:Byte Ptr)
 	Method SetPrivateDataInterface(Name:Byte Ptr,pUnknown:Byte Ptr)
 	Method GetPrivateData(Name:Byte Ptr,pDataSize:Int Var,pData:Byte Ptr)
-	Method GetParent(riid:Byte Ptr,ppParent:IUnknown var)
+	Method GetParent(riid:Byte Ptr,ppParent:IUnknown Var)
 EndType
 
 Type IDXGIDeviceSubObject Extends IDXGIObject
@@ -328,12 +328,6 @@ EndType
 
 EndExtern
 
-Global _DXGI = LoadLibraryA("dxgi.dll")
-If Not _DXGI
-	Notify "ERROR!~nCannot find 'dxgi.dll'~nPlease install DirectX11 from Microsoft~nExiting.",True
-	End
-EndIf
-
 'DEFINE_GUID(IID_IDXGIFactory,0x7b7166ec,0x21c7,0x44ae,0xb2,0x1a,0xc9,0xae,0x32,0x1a,0xe3,0x69);
 'DEFINE_GUID(IID_IDXGIAdapter,0x2411e7e1,0x12ac,0x4ccf,0xbd,0x14,0x97,0x98,0xe8,0x53,0x4d,0xc0);
 'DEFINE_GUID(IID_IDXGIDevice,0x54ec77fa,0x1377,0x44e6,0x8c,0x32,0x88,0xfd,0x5f,0x44,0xc8,0x4c);
@@ -341,5 +335,7 @@ EndIf
 Global IID_IDXGIFactory[]=[$7b7166ec,$44ae21c7,$aec91ab2,$69e31a32]
 Global IID_IDXGIAdapter[]=[$2411e7e1,$4ccf12ac,$989714bd,$c04d53e8]
 Global IID_IDXGIDevice[]= [$54ec77fa,$44e61377,$fd88328c,$4cc8445f]
+Global CreateDXGIFactory(riid:Byte Ptr,ppFactory:IDXGIFactory Var) "win32"
 
-Global CreateDXGIFactory(riid:Byte Ptr,ppFactory:IDXGIFactory Var)"win32" = GetProcAddress(_DXGI,"CreateDXGIFactory")
+Global _DXGI = LoadLibraryA("dxgi.dll")
+If _DXGI CreateDXGIFactory = GetProcAddress(_DXGI,"CreateDXGIFactory")

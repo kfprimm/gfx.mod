@@ -794,15 +794,13 @@ Global IID_ID3D11CommandList[]			=[$a24bc4d1,$43f7769e,$ff981380,$e2186c56]
 Global IID_ID3D11DeviceContext[]		=[$c0bfa96c,$44fbe089,$f826af8e,$da906179]
 Global IID_ID3D11Device[]				=[$db6f6ddb,$4e88ac77,$9d815382,$40f1bbf9]
 
+Global D3D11CreateDevice(pAdapter:Byte Ptr,DriverType,Software,Flags,pFeatureLevels:Byte Ptr,Featurelevels,SDKVersion,ppDevice:ID3D11Device Var,..
+			pFeatureLevel:Byte Ptr,ppImmediateContext:ID3D11DeviceContext Var)"win32"
+Global D3D11CreateDeviceAndSwapChain(pAdapter:Byte Ptr,DriverType,Software,Flags,pFeatureLevels:Byte Ptr,FeatureLevels,SDKVersion,pSwapChainDesc:Byte Ptr,..
+			_pSwapChain:IDXGISwapChain Var,_ppDevice:ID3D11Device Var,pFeatureLevel:Byte Ptr,ppDeviceContext:ID3D11DeviceContext Var)"win32"			
 Global _d3d11 = LoadLibraryA("D3D11.dll")
 
-If Not _d3d11
-	Notify "Critical Error!~nCannot find D3D11.dll~nPlease install DirectX11~nExiting.",True
-	End
+If _d3d11 
+	D3D11CreateDevice = GetProcAddress(_d3d11,"D3D11CreateDevice")
+	D3D11CreateDeviceAndSwapChain = GetProcAddress(_d3d11,"D3D11CreateDeviceAndSwapChain")
 EndIf
-
-'Core
-Global D3D11CreateDevice(pAdapter:Byte Ptr,DriverType,Software,Flags,pFeatureLevels:Byte Ptr,Featurelevels,SDKVersion,ppDevice:ID3D11Device Var,..
-			pFeatureLevel:Byte Ptr,ppImmediateContext:ID3D11DeviceContext Var)"win32"=GetProcAddress(_d3d11,"D3D11CreateDevice")
-Global D3D11CreateDeviceAndSwapChain(pAdapter:Byte Ptr,DriverType,Software,Flags,pFeatureLevels:Byte Ptr,FeatureLevels,SDKVersion,pSwapChainDesc:Byte Ptr,..
-			_pSwapChain:IDXGISwapChain Var,_ppDevice:ID3D11Device Var,pFeatureLevel:Byte Ptr,ppDeviceContext:ID3D11DeviceContext Var)"win32"=GetProcAddress(_d3d11,"D3D11CreateDeviceAndSwapChain")

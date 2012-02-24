@@ -28,14 +28,8 @@ Const D3DCOMPILE_WARNINGS_ARE_ERRORS            = ( 1 Shl 18)
 Const D3DCOMPILE_EFFECT_CHILD_EFFECT              = ( 1 Shl 0)
 Const D3DCOMPILE_EFFECT_ALLOW_SLOW_OPS            = ( 1 Shl 1)
 
-Global _d3dcompiler = LoadLibraryA("d3dcompiler_43.dll")
-If Not _d3dcompiler
-	Notify "ERROR!~nCannot find 'd3dcompiler_43.dll'~nPlease install the latest version of DirectX11~nExiting.",True
-	End
-EndIf
-
-Global D3DCreateBlob(Size,ppBlob:ID3DBlob Var)"win32" = GetProcAddress(_d3dcompiler,"D3DCreateBlob")
-Global D3DCompile(pSrcData:Byte Ptr,SrcDataSize,pSourceName:Byte Ptr,pDefines:Byte Ptr,pInclude:Byte Ptr,pEntryPoint:Byte Ptr,pTarget:Byte Ptr,Flags1,Flags2,ppCode:ID3DBlob Var,ppErrorMsgs:ID3DBlob Var)"win32" = GetProcAddress(_d3dcompiler,"D3DCompile")
+Global D3DCreateBlob(Size,ppBlob:ID3DBlob Var) "win32" 
+Global D3DCompile(pSrcData:Byte Ptr,SrcDataSize,pSourceName:Byte Ptr,pDefines:Byte Ptr,pInclude:Byte Ptr,pEntryPoint:Byte Ptr,pTarget:Byte Ptr,Flags1,Flags2,ppCode:ID3DBlob Var,ppErrorMsgs:ID3DBlob Var) "win32"
 'Global D3DPreprocess()
 'Global D3DGetDebugInfo()
 'Global D3DReflect()
@@ -47,3 +41,10 @@ Global D3DCompile(pSrcData:Byte Ptr,SrcDataSize,pSourceName:Byte Ptr,pDefines:By
 'Global D3DGetBlobPart()
 'Global D3DCompressShaders()
 'Global D3DDecompressShaders()
+
+Global _d3dcompiler = LoadLibraryA("d3dcompiler_43.dll")
+If _d3dcompiler
+	D3DCreateBlob = GetProcAddress(_d3dcompiler,"D3DCreateBlob")
+	D3DCompile = GetProcAddress(_d3dcompiler,"D3DCompile")
+EndIf
+

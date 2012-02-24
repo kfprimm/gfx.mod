@@ -3,6 +3,7 @@ Strict
 
 Import GFX.GLMax2DEx
 Import GFX.D3D9Max2DEx
+Import GFX.D3D11Max2DEx
 
 Graphics 800,600
 

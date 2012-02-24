@@ -33,6 +33,22 @@ Type TD3D9Max2DExDriver Extends TMax2DExDriver
 	Method SetBuffer(buffer:TBuffer)
 		_currentbuffer=buffer
 	End Method
+	
+	Method CreateBatchImage:TBatchImage(image:TImage,color=False,rotation=False,scale=False,uv=False,frames=False)
+    Throw "Batching support needs implementation!"
+	End Method
+	
+	Method PlotPoints(points#[])
+		Throw "PlotPoints support needs implementation!"
+	End Method
+  
+  Method DrawLines(lines#[],linked)
+		Throw "DrawLines support needs implementation!"
+	End Method 
+  
+  Method DrawImageTiled(image:TImage,x#=0,y#=0,frame=0)
+		Throw "DrawImageTiled support needs implementation!"
+	End Method
 End Type
 
 Rem
