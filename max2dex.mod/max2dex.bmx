@@ -112,9 +112,9 @@ Type TMax2DExDriver Extends TMax2DDriver
 	
 	Method PlotPoints(points#[]) Abstract
   
-  Method DrawLines(lines#[],linked) Abstract
-  
-  Method DrawImageTiled(image:TImage,x#=0,y#=0,frame=0) Abstract
+	Method DrawLines(lines#[],linked) Abstract
+	
+	Method DrawImageTiled(image:TImage,x#=0,y#=0,frame=0) Abstract
 	
 	Method MakeBuffer:TBuffer(src:Object,width,height,flags) Abstract
 	

@@ -1083,9 +1083,12 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 EndType
 
 Function D3D11Max2DDriver:TD3D11Max2DDriver()
-	Global _driver:TD3D11Max2DDriver=New TD3D11Max2DDriver
-	Return _driver
+	If D3D11GraphicsDriver()
+		Global _driver:TD3D11Max2DDriver = New TD3D11Max2DDriver
+		Return _driver
+	EndIf
 End Function
 
 Local driver:TD3D11Max2DDriver = D3D11Max2DDriver()
+If driver SetGraphicsDriver driver, GRAPHICS_BACKBUFFER
 

@@ -448,6 +448,7 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 EndType
 
 Function D3D11GraphicsDriver:TD3D11GraphicsDriver()
+	If _d3d11 = 0 Return Null
 	Global _doneD3D11
 	If Not _doneD3D11
 		_driver = New TD3D11GraphicsDriver.Create()
