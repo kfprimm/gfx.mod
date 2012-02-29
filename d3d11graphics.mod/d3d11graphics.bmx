@@ -76,7 +76,7 @@ Function CreateD3D11Device()
 	'	CreationFlag :| D3D11_CREATE_DEVICE_DEBUG
 	'?
 	If D3D11CreateDevice(Null,D3D_DRIVER_TYPE_HARDWARE,Null,CreationFlag,Null,0,D3D11_SDK_VERSION,_d3d11dev,FeatureLevels,_d3d11devcon)<0
-		Throw "Critical Error!~nCannot create D3D11Device~nExiting."
+		Throw "Critical Error!~nCannot create D3D11Device"
 	EndIf
 	
 	If FeatureLevels[0] < D3D_FEATURE_LEVEL_10_0
@@ -90,7 +90,7 @@ Function CreateD3D11Device()
 	_querydesc.Query = D3D11_QUERY_EVENT
 	
 	If _d3d11dev.CreateQuery(_querydesc,_query)<0
-		Throw "Critical Error!~nCannot create device query!~nExiting."
+		Throw "Critical Error!~nCannot create device query!"
 	EndIf
 	_d3d11devcon.Begin _query
 	
@@ -307,7 +307,7 @@ Type TD3D11Graphics Extends TGraphics
 		Adapter.GetParent(IID_IDXGIFactory,Factory)
 	
 		If Factory.CreateSwapChain(_d3d11dev,_sd,_swapchain)<0
-			Throw "Critical Error!~nCannot create swap chain~nExiting"
+			Throw "Critical Error!~nCannot create swap chain"
 		EndIf
 
 		Factory.MakeWindowAssociation(hwnd,DXGI_MWA_NO_WINDOW_CHANGES)
@@ -318,11 +318,11 @@ Type TD3D11Graphics Extends TGraphics
 		'Create a rendertarget
 		Local pBackBuffer:ID3D11Texture2D
 		If _swapchain.GetBuffer(0,IID_ID3D11Texture2D,pBackBuffer)<0
-			Throw "Critical Error!~nCannot create backbuffer~nExiting."
+			Throw "Critical Error!~nCannot create backbuffer"
 		EndIf
 	
 		If _d3d11dev.CreateRenderTargetView(pBackBuffer,Null,_rendertargetview)<0
-			Throw "Critical Error!~nCannot create RenderTargetView for rendering~n"
+			Throw "Critical Error!~nCannot create RenderTargetView for rendering"
 		EndIf
 
 		If pBackBuffer pBackBuffer.Release_()
@@ -369,29 +369,29 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 		If Not _d3d11 Return Null
 	
 		If CreateDXGIFactory(IID_IDXGIFactory,_Factory)<0
-			Throw "Error creating IDXGIFactory!~nExiting."
+			Throw "Error creating IDXGIFactory!"
 		EndIf
 
 		'TODO: Multiple GPUs?
 		If _Factory.EnumAdapters(0,_Adapter)<0
-			Throw "Error enumerating GPUs!~nExiting."
+			Throw "Error enumerating GPUs!"
 		EndIf
 		
 		'TODO: Each GPU may have multiple outputs?
 		If _Adapter.EnumOutputs(0,_Output)<0
-			Throw "Error enumeration graphics modes!~nExiting"
+			Throw "Error enumeration graphics modes!"
 		EndIf
 		
 		Local nummodes
 		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,Null)<0
-			Throw "Error getting number of graphics modes!~nExiting."
+			Throw "Error getting number of graphics modes!"
 		EndIf
 		_Displaymodes = _Displaymodes[..nummodes]
 
 		Local modesptr:Byte Ptr=MemAlloc(SizeOf(DXGI_MODE_DESC)*nummodes)
 		
 		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,modesptr)<0
-			Throw "Error filling display modes data!~nExiting."			
+			Throw "Error filling display modes data!"			
 		EndIf
 		
 		_modes=New TGraphicsMode[nummodes]
@@ -483,7 +483,7 @@ Function D3D11ShowAllSupportedFeatures(InFormat=0)
 		Local pThreading:D3D11_FEATURE_DATA_THREADING = New D3D11_FEATURE_DATA_THREADING
 		
 		If _d3d11dev.CheckFeatureSupport(D3D11_FEATURE_THREADING,pThreading,8)<0
-			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D11_FEATURE_THREADING : FAILED~nExiting"
+			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D11_FEATURE_THREADING : FAILED~n"
 			Return
 		EndIf
 		
@@ -496,7 +496,7 @@ Function D3D11ShowAllSupportedFeatures(InFormat=0)
 		Local pDoubles:D3D11_FEATURE_DATA_DOUBLES = New D3D11_FEATURE_DATA_DOUBLES
 		
 		If _d3d11dev.CheckFeatureSupport(D3D11_FEATURE_DOUBLES,pDoubles,4)<0
-			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D11_FEATURE_DOUBLES : FAILED~nExiting"
+			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D11_FEATURE_DOUBLES : FAILED~n"
 			Return
 		EndIf
 
@@ -508,7 +508,7 @@ Function D3D11ShowAllSupportedFeatures(InFormat=0)
 		Local pD3D10XOptions:D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS = New D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS
 		
 		If _d3d11dev.CheckFeatureSupport(D3D11_FEATURE_D3D10_X_HARDWARE_OPTIONS,pD3D10XOptions,4)<0
-			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D10_HARDWARE_OPTIONS : FAILED~nExiting"
+			WriteStdout "WARNING:-~n_d3d11dev.CheckFeatureSupport - D3D10_HARDWARE_OPTIONS : FAILED~n"
 			Return
 		EndIf
 		
@@ -568,7 +568,7 @@ Function D3D11ShowAllSupportedFeatures(InFormat=0)
 	EndFunction
 	
 	If Not _d3d11dev
-		Throw "D3D11Device isnt ready!~nExiting"
+		Throw "D3D11Device isnt ready!"
 	EndIf
 
 	CheckThreading
