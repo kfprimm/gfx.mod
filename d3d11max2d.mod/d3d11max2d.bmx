@@ -37,9 +37,6 @@ Global _linewidth#
 Global _width#,_height#
 Global _currblend
 
-'Screen rotation
-Global _stored_rot#,_stored_sx#,_stored_sy#
-
 'D3D11
 Global _shaderready
 Global _currentshader:ID3D11PixelShader
@@ -441,24 +438,6 @@ Function FreeD3D11Max2DResources()
 	_shaderready = False
 EndFunction
 
-Function AdjustScreenRotationScale(tx# Var, ty# Var)
-	_stored_rot = _max2DGraphics.tform_rot
-	_stored_sx = _max2DGraphics.tform_scale_x
-	_stored_sy = _max2DGraphics.tform_scale_y
-	
-	SetRotation _stored_rot-_driver.tform_scr_rot
-	SetScale _stored_sx*_driver.tform_scr_zoom,_stored_sy*_driver.tform_scr_zoom
-	
-	_driver.TransformPoint tx,ty
-	tx :+ _driver.focus_x
-	ty :+ _driver.focus_y
-EndFunction
-
-Function ResetScreenRotationScale()
-	SetRotation _stored_rot
-	SetScale _stored_sx,_stored_sy
-EndFunction
-
 Public
 
 Type TD3D11ImageFrame Extends TImageFrame 
@@ -574,7 +553,7 @@ Type TD3D11ImageFrame Extends TImageFrame
 	EndMethod
 
 	Method Draw( x0#,y0#,x1#,y1#,tx#,ty#,sx#,sy#,sw#,sh# )
-		AdjustScreenRotationScale tx,ty
+		_driver.AdjustScreenRotationScale tx,ty
 		
 		If Not _shaderready Return
 
@@ -625,16 +604,34 @@ Type TD3D11ImageFrame Extends TImageFrame
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP)
 		_d3d11devcon.Draw(4,0)
 		
-		ResetScreenRotationScale
+		_driver.ResetScreenRotationScale
 	EndMethod
 EndType
 
 Type TD3D11Max2DDriver Extends TMax2DDriver
 	'Screen rotation
-	'Credit to Dave Williamson ( odd.mod author) for the screen rotation/zoom algos
 	Field tform_scr_rot#, tform_scr_zoom#
 	Field tform_scr_ix#,tform_scr_iy#,tform_scr_jx#,tform_scr_jy#
+	Field stored_scr_rot#,stored_scale_x,stored_scale_y
 	Field focus_x#,focus_y#
+	
+	Method AdjustScreenRotationScale(tx# Var, ty# Var)
+		stored_scr_rot = _max2DGraphics.tform_rot
+		stored_scale_x = _max2DGraphics.tform_scale_x
+		stored_scale_y = _max2DGraphics.tform_scale_y
+	
+		SetRotation stored_scr_rot-_driver.tform_scr_rot
+		SetScale stored_scale_x*tform_scr_zoom,stored_scale_y*tform_scr_zoom
+	
+		TransformPoint tx,ty
+		tx :+ focus_x
+		ty :+ focus_y
+	EndMethod
+	
+	Method ResetScreenRotationScale()
+		SetRotation stored_scr_rot
+		SetScale stored_scale_x,stored_scale_y
+	EndMethod
 	
 	Method SetScreenRotation( rot# )
 		tform_scr_rot=rot
@@ -814,6 +811,15 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 
 	Method SetViewport( x,y,width,height )
 		_d3d11devcon.RSSetScissorRects(1,[x,y,x+width,y+height])
+		
+		'Local vp:D3D11_VIEWPORT = New D3D11_VIEWPORT
+		'vp.Width = width
+		'vp.Height = height
+		'vp.MinDepth = 0.0
+		'vp.MaxDepth = 1.0
+		'vp.TopLeftX = x
+		'vp.TopLeftY = y
+		'_d3d11devcon.RSSetViewports(1,vp)
 	EndMethod
 
 	Method SetTransform( xx#,xy#,yx#,yy# )
