@@ -363,7 +363,7 @@ Type TBatchImage
 EndType
 
 Function CreateBatchImage:TBatchImage(image:TImage Var,color=False,rotation=False,scale=False,uv=False,frames=False)
-	If Not VerifyDX11Max2DDriver() Return
+	If Not VerifyD3D11Max2DDriver() Return
 
 	If Not image Return
 	
