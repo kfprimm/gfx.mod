@@ -37,6 +37,9 @@ Global _linewidth#
 Global _width#,_height#
 Global _currblend
 
+'Screen rotation
+Global _stored_rot#,_stored_sx#,_stored_sy#
+
 'D3D11
 Global _shaderready
 Global _currentshader:ID3D11PixelShader
@@ -101,8 +104,7 @@ Type TD3D11RingBuffer
 		Desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE
 
 		If _d3d11dev.CreateBuffer(Desc,Null,_buffer)<0
-			Notify "Cannot create vertex ring buffer~nExiting.",True
-			End
+			Throw "Cannot create vertex ring buffer~nExiting."
 		EndIf
 		
 		Return Self
@@ -415,10 +417,10 @@ Function FreeD3D11Max2DResources()
 	'FreeShadowResources()
 	'FreeLightingResources()
 
-	SAFE_RELEASE(_vertexshader) '
+	SAFE_RELEASE(_vertexshader)
 	SAFE_RELEASE(_texturepixelshader)
 	SAFE_RELEASE(_colorpixelshader)
-	SAFE_RELEASE(_max2dlayout) '
+	SAFE_RELEASE(_max2dlayout)
 	SAFE_RELEASE(_vertexbuffer)
 	SAFE_RELEASE(_pointsamplerstate)
 	SAFE_RELEASE(_linearsamplerstate)
@@ -439,6 +441,24 @@ Function FreeD3D11Max2DResources()
 	_shaderready = False
 EndFunction
 
+Function AdjustScreenRotationScale(tx# Var, ty# Var)
+	_stored_rot = _max2DGraphics.tform_rot
+	_stored_sx = _max2DGraphics.tform_scale_x
+	_stored_sy = _max2DGraphics.tform_scale_y
+	
+	SetRotation _stored_rot-_driver.tform_scr_rot
+	SetScale _stored_sx*_driver.tform_scr_zoom,_stored_sy*_driver.tform_scr_zoom
+	
+	_driver.TransformPoint tx,ty
+	tx :+ _driver.focus_x
+	ty :+ _driver.focus_y
+EndFunction
+
+Function ResetScreenRotationScale()
+	SetRotation _stored_rot
+	SetScale _stored_sx,_stored_sy
+EndFunction
+
 Public
 
 Type TD3D11ImageFrame Extends TImageFrame 
@@ -452,7 +472,7 @@ Type TD3D11ImageFrame Extends TImageFrame
 	Method Create:TImageFrame(pixmap:TPixmap,flags)
 		If Not _shaderready Return
 		If Not _TD3D11ImageFrameList _TD3D11ImageFrameList = New TList
-	
+
 		Local width#=pixmap.width
 		Local height#=pixmap.height
 		Local mipmapped = (flags&MIPMAPPEDIMAGE=MIPMAPPEDIMAGE)
@@ -554,6 +574,8 @@ Type TD3D11ImageFrame Extends TImageFrame
 	EndMethod
 
 	Method Draw( x0#,y0#,x1#,y1#,tx#,ty#,sx#,sy#,sw#,sh# )
+		AdjustScreenRotationScale tx,ty
+		
 		If Not _shaderready Return
 
 		Local u0#=sx*_uscale
@@ -602,10 +624,49 @@ Type TD3D11ImageFrame Extends TImageFrame
 		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _vertexbuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP)
 		_d3d11devcon.Draw(4,0)
+		
+		ResetScreenRotationScale
 	EndMethod
 EndType
 
 Type TD3D11Max2DDriver Extends TMax2DDriver
+	'Screen rotation
+	'Credit to Dave Williamson ( odd.mod author) for the screen rotation/zoom algos
+	Field tform_scr_rot#, tform_scr_zoom#
+	Field tform_scr_ix#,tform_scr_iy#,tform_scr_jx#,tform_scr_jy#
+	Field focus_x#,focus_y#
+	
+	Method SetScreenRotation( rot# )
+		tform_scr_rot=rot
+		UpdateTransform
+	End Method
+
+	Method SetZoom( zoom# )
+		tform_scr_zoom=zoom
+		UpdateTransform
+	End Method
+	
+	Method SetFocus( x#, y# )
+		focus_x=x
+		focus_y=y
+	End Method
+
+	Method UpdateTransform()
+		Local s#=Sin(-tform_scr_rot)
+		Local c#=Cos(-tform_scr_rot)
+		tform_scr_ix= c*tform_scr_zoom
+		tform_scr_iy=-s*tform_scr_zoom
+		tform_scr_jx= s*tform_scr_zoom
+		tform_scr_jy= c*tform_scr_zoom
+	End Method
+	
+	Method TransformPoint( x# Var, y# Var )
+		Local tmp_x#=x
+		x=x*tform_scr_ix+y*tform_scr_iy
+		y=tmp_x*tform_scr_jx+y*tform_scr_jy
+	End Method
+	'End of Screen rotation
+	
 	Method ToString$()
 		Local Feature$
 		Local FeatureLevel = _d3d11dev.GetFeatureLevel()
@@ -670,7 +731,7 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		_d3d11graphics = TD3D11Graphics( _max2DGraphics._graphics )
 		
 		Assert _max2DGraphics And _d3d11graphics
-		
+				
 		_d3d11dev = _d3d11Graphics.GetDirect3DDevice()
 		_d3d11devcon = _d3d11Graphics.GetDirect3DDeviceContext()
 		
@@ -680,7 +741,8 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		CreateD3D11Max2DResources
 
 		_max2DGraphics.MakeCurrent
-
+		_driver = TD3D11Max2DDriver(_max2DDriver)
+		
 		_width = GraphicsWidth()
 		_height = GraphicsHeight()
 	EndMethod
@@ -770,6 +832,10 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	EndMethod
 
 	Method Plot( x#,y# )
+		TransformPoint x,y
+		x :+ focus_x
+		y :+ focus_y
+		
 		Local _vert#[4]
 		_vert[0]=x
 		_vert[1]=y
@@ -790,6 +856,12 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 
 	Method DrawLine( x0#,y0#,x1#,y1#,tx#,ty# )
 		Local _verts#[16]
+		
+		TransformPoint x0,y0
+		TransformPoint x1,y1
+		TransformPoint tx,ty
+		tx :+ focus_x
+		ty :+ focus_y
 		
 		Local lx0# = x0*_ix + y0*_iy + tx
 		Local ly0# = x0*_jx + y0*_jy + ty
@@ -852,6 +924,8 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	Method DrawRect( x0#,y0#,x1#,y1#,tx#,ty# )
 		Local _verts#[16]
 		
+		AdjustScreenRotationScale tx,ty
+		
 		_verts[0]  = x0*_ix + y0*_iy + tx
 		_verts[1]  = x0*_jx + y0*_jy + ty
 		_verts[4]  = x1*_ix + y0*_iy + tx
@@ -873,11 +947,15 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _vertexbuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP)
 		_d3d11devcon.Draw(4,0)
+		
+		ResetScreenRotationScale
 	EndMethod
 
 	Method DrawOval(x0#,y0#,x1#,y1#,tx#,ty#)
 		Local BuildBuffer=False
 
+		AdjustScreenRotationScale tx,ty
+		
 		Local xr#=(x1-x0)*0.5
 		Local yr#=(y1-y0)*0.5
 		Local segs=Abs(xr)+Abs(yr)
@@ -946,9 +1024,13 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _ovalbuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 		_d3d11devcon.Draw(segs*3,0)
+		
+		ResetScreenRotationScale
 	EndMethod
 
 	Method DrawPoly( inverts#[],handlex#,handley#,tx#,ty# )
+		AdjustScreenRotationScale tx,ty
+		
 		If inverts.length<6 Or (inverts.length&1) Return
 		Local nv=inverts.length/2
 		Local numpolys = nv-2
@@ -1005,6 +1087,8 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		_d3d11devcon.IASetVertexBuffers(0,1,Varptr _polybuffer,Varptr stride,Varptr offset)
 		_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 		_d3d11devcon.Draw(numpolys*3,0)
+		
+		ResetScreenRotationScale
 	EndMethod
 
 	Method DrawPixmap( pixmap:TPixmap,x0,y0 )		
@@ -1122,6 +1206,10 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	
 	Method Create:TD3D11Max2DDriver()
 		If Not D3D11GraphicsDriver() Return Null
+			'Init screen rotation
+			tform_scr_rot=0
+			tform_scr_zoom=1
+			UpdateTransform
 		Return Self
 	EndMethod
 EndType
@@ -1135,13 +1223,16 @@ Function D3D11Max2DDriver:TD3D11Max2DDriver()
 	Return _driver
 End Function
 
+Function VerifyD3D11Max2DDriver()
+	If GetGraphicsDriver().ToSTring()[0..9] <> "DirectX11" Throw "D3D11Max2DDriver() Required!"
+EndFunction
+
 Local driver:TD3D11Max2DDriver = D3D11Max2DDriver()
 
 
 '----------- Extra Max2D functionality -----------
-'Specific to Dx11 at the mo :)
 Function PlotPoints(points#[])
-	If Not VerifyDX11Max2DDriver() Return
+	VerifyD3D11Max2DDriver
 	If points.length<2 Or (points.length&1) Return
 	
 	Local buildbuffer = False
@@ -1186,7 +1277,7 @@ Function PlotPoints(points#[])
 EndFunction
 
 Function DrawLines(lines#[],Linked=False)
-	If Not VerifyDX11Max2DDriver() Return
+	VerifyD3D11Max2DDriver
 	If lines.length<4 Or (lines.length&1) Return
 	If linked And (lines.length Mod 4) Return
 	
@@ -1235,7 +1326,7 @@ Function DrawLines(lines#[],Linked=False)
 EndFunction
 
 Function DrawImageTiled(image:TImage,x#=0,y#=0,frame=0)
-	If Not VerifyDX11Max2DDriver() Return
+	VerifyD3D11Max2DDriver
 	
 	Local iframe:TD3D11ImageFrame=TD3D11ImageFrame(image.Frame(frame))
 	If Not iframe Return
@@ -1339,10 +1430,20 @@ Function DrawImageTiled(image:TImage,x#=0,y#=0,frame=0)
 	_d3d11devcon.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST)
 
 	_d3d11devcon.Draw(6*numtiles,0)
-
 EndFunction
 
-Function VerifyDX11Max2DDriver()
-	If GetGraphicsDriver().ToSTring()[0..9] = "DirectX11" Return True
-EndFunction
+Function SetScreenRotationD3D11(rot#)
+	VerifyD3D11Max2DDriver()
+	_driver.SetScreenRotation rot
+End Function
+
+Function SetScreenZoomD3D11(zoom#)
+	VerifyD3D11Max2DDriver
+	_driver.SetZoom zoom
+End Function
+
+Function SetScreenFocusD3D11(x#,y#)
+	VerifyD3D11Max2DDriver
+	_driver.SetFocus x,y
+End Function
 ? 'WIN32
