@@ -8,6 +8,9 @@ ModuleInfo "License: SRS Shared Source Code License"
 ModuleInfo "Copyright: SRS Software"
 ModuleInfo ""
 ModuleInfo "BUGFIXES:"
+ModuleInfo "Fixed available graphic modes should not work on Dx9"
+ModuleInfo "Fixed fullscreen selecting correct parameters"
+ModuleInfo "Fixed image scaling bug"
 ModuleInfo "Fixed render lag for window and fullscreen"
 ModuleInfo "Fixed crash when exiting from fullscreen then using another DX driver"
  
@@ -134,7 +137,6 @@ Type TD3D11Graphics Extends TGraphics
 	Field _attached
 	Field _swapchain:IDXGISwapChain
 	Field _sd:DXGI_SWAP_CHAIN_DESC
-	Field _fullscreentarget:DXGI_MODE_DESC
 	Field _rendertargetview:ID3D11RenderTargetView
 
 	Method GetDirect3DDevice:ID3D11Device()
@@ -195,8 +197,7 @@ Type TD3D11Graphics Extends TGraphics
 	EndMethod
 	
 	Method Create:TD3D11Graphics(width,height,depth,hertz,flags)
-
-		If _windowed Return Null 'Already have a window thats full screen
+		If _depth Return Null 'Already have a window thats full screen
 
 		'register wndclass
 		Local WNDCLASS:WNDCLASSW=New WNDCLASSW
@@ -263,40 +264,51 @@ Type TD3D11Graphics Extends TGraphics
 	EndMethod
 	
 	Method CreateSwapChain(hwnd,width,height,depth,hertz,flags)
-		Local modes:DXGI_MODE_DESC[] = _Displaymodes
-
+		Local FullScreenTarget:DXGI_MODE_DESC
 		Local numerator = 0
-		Local denominator = 1
-		Local slo,scaling
-		
+
 		If depth
-			For Local i = 0 Until modes.length
-				If width = modes[i].Width
-					If height = modes[i].Height
-						Local n = modes[i].RefreshRate_Numerator
-						Local d = modes[i].RefreshRate_Denominator
-						
-						If hertz = n/d
-							'scaling = modes[i].Scaling
-							numerator = modes[i].RefreshRate_Numerator
-							denominator = modes[i].RefreshRate_Denominator
-							'slo = modes[i].ScanlineOrdering
-							Exit
+			Local index
+			For Local i:TGraphicsMode = EachIn GraphicsModes()
+				If width = i.Width
+					If height = i.height
+						If depth = i.depth
+							If hertz = i.hertz
+								FullScreenTarget = _displaymodes[index]
+							EndIf
 						EndIf
 					EndIf
 				EndIf
+				
+				index:+1
 			Next
 		EndIf
-		
+
 		_sd = New DXGI_SWAP_CHAIN_DESC
 		_sd.BufferCount = 1	'MSDN conflicting information on this parameter
 		_sd.BufferDesc_Width = width
 		_sd.BufferDesc_Height = height
-		_sd.BufferDesc_Format = DXGI_FORMAT_R8G8B8A8_UNORM
-		_sd.BufferDesc_RefreshRate_Numerator = numerator
-		_sd.BufferDesc_RefreshRate_Denominator = denominator
-		_sd.BufferDesc_Scaling = scaling
-		_sd.BufferDesc_ScanlineOrdering = slo
+	
+		If depth And FullScreenTarget
+			_sd.BufferDesc_Format = FullscreenTarget.Format
+			_sd.BufferDesc_RefreshRate_Numerator = FullscreenTarget.RefreshRate_Numerator
+			_sd.BufferDesc_RefreshRate_Denominator = FullscreenTarget.RefreshRate_Denominator
+			_sd.BufferDesc_Scaling = 0'FullscreenTarget.Scaling
+			_sd.BufferDesc_Scaling = 0'FullscreenTarget.ScanlineOrdering
+		Else
+			_sd.BufferDesc_Format = DXGI_FORMAT_R8G8B8A8_UNORM 'Standard 32bit display
+			_sd.BufferDesc_RefreshRate_Numerator = 0
+			_sd.BufferDesc_RefreshRate_Denominator = 1
+			_sd.BufferDesc_Scaling = 0
+			_sd.BufferDesc_ScanlineOrdering = 0
+		EndIf
+		
+		If depth
+			_sd.Windowed = False
+		Else
+			_sd.Windowed = True
+		EndIf
+					
 		_sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT
 		_sd.OutputWindow = hwnd
 		_sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD
@@ -304,7 +316,7 @@ Type TD3D11Graphics Extends TGraphics
 		_sd.SampleDesc_Count = 1
 		_sd.SampleDesc_Quality = 0
 
-		If Not depth _sd.Windowed = True
+		'If Not depth _sd.Windowed = True
 	
 		Local Factory:IDXGIFactory
 		Local Adapter:IDXGIAdapter
@@ -396,38 +408,58 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 		
 		'TODO: Each GPU may have multiple outputs?
 		If _Adapter.EnumOutputs(0,_Output)<0
-			Throw "Error enumeration graphics modes!"
+			Throw "Error enumerating graphic outputs!"
 		EndIf
 
-		Local nummodes
-		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED|DXGI_ENUM_MODES_SCALING,nummodes,Null)<0
-			Throw "Error getting number of graphics modes!"
+		'16bit modes - EXPERIMENTAL - NOT WORKING!
+		Local nummodes16
+		Local nummodes32
+		Local totalmodes
+		
+		Local Format16Bit = -1'DXGI_FORMAT_??????
+		Local Format32Bit = DXGI_FORMAT_R8G8B8A8_UNORM
+		
+		If _Output.GetDisplaymodeList(Format16Bit,0,nummodes16,Null)<0
+			Throw "Error getting number of 16bit graphics modes!"
 		EndIf
-		_Displaymodes = _Displaymodes[..nummodes]
+		
+		If _Output.GetDisplaymodeList(Format32Bit,0,nummodes32,Null)<0
+			Throw "Error getting number of 32bit graphics modes!"
+		EndIf
+		
+		totalmodes = nummodes16 + nummodes32
+		
+		_Displaymodes = _Displaymodes[..totalmodes]
+		_modes=New TGraphicsMode[totalmodes]
+		
+		Local modesptr:Byte Ptr=MemAlloc(SizeOf(DXGI_MODE_DESC)*totalmodes)
+		Local modesptr32:Byte Ptr = modesptr + (SizeOf(DXGI_MODE_DESC)*nummodes16) 'index into where the 32bit modes are
+		
+		_Output.GetDisplaymodeList(Format16Bit,DXGI_ENUM_MODES_INTERLACED,nummodes16,modesptr)
+		_Output.GetDisplaymodeList(Format32Bit,DXGI_ENUM_MODES_INTERLACED,nummodes32,modesptr32)
 
-		Local modesptr:Byte Ptr=MemAlloc(SizeOf(DXGI_MODE_DESC)*nummodes)
-		
-		'TODO: 16bit modes
-		
-		'32bit modes		
-		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,modesptr)<0
-			Throw "Error filling 32bit display modes data!"			
-		EndIf
-		
-		_modes=New TGraphicsMode[nummodes]
-		For Local i = 0 Until nummodes
+		_modes = New TGraphicsMode[totalmodes]
+
+		Local index
+		For Local i = 0 Until totalmodes
 			_Displaymodes[i] = New DXGI_MODE_DESC
 			MemCopy _Displaymodes[i],modesptr+(SizeOf( DXGI_MODE_DESC) * i),SizeOf(DXGI_MODE_DESC)
-			
+		Next
+
+		For Local i = 0 Until totalmodes
 			_modes[i] = New TGraphicsMode
-			Local dm:TGraphicsMode[] = _modes
 
 			_modes[i].width = _Displaymodes[i].Width
-			_modes[i].Height = _Displaymodes[i].Height
-			_modes[i].Hertz = _Displaymodes[i].RefreshRate_Numerator/_Displaymodes[i].RefreshRate_Denominator
-			_modes[i].depth = 32
+			_modes[i].height = _Displaymodes[i].Height
+			_modes[i].hertz = _Displaymodes[i].RefreshRate_Numerator/_Displaymodes[i].RefreshRate_Denominator
+			
+			If _Displaymodes[i].Format = Format16Bit
+				_modes[i].depth = 16
+			Else
+				_modes[i].depth = 32
+			EndIf
 		Next
-		
+
 		MemFree modesptr
 
 		If _Output _Output.Release_
