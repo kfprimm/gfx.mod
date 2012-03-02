@@ -33,7 +33,6 @@ Global _displaymodes:DXGI_MODE_DESC[]
 Global _modes:TGraphicsMode[]
 Global _d3d11dev:ID3D11Device
 Global _d3d11devcon:ID3D11DeviceContext
-Global _fullscreentarget:DXGI_MODE_DESC
 Global _query:ID3D11Query
 Global _release:TList
 Global _windowed
@@ -135,7 +134,7 @@ Type TD3D11Graphics Extends TGraphics
 	Field _attached
 	Field _swapchain:IDXGISwapChain
 	Field _sd:DXGI_SWAP_CHAIN_DESC
-	Field _target:DXGI_MODE_DESC
+	Field _fullscreentarget:DXGI_MODE_DESC
 	Field _rendertargetview:ID3D11RenderTargetView
 
 	Method GetDirect3DDevice:ID3D11Device()
@@ -196,9 +195,9 @@ Type TD3D11Graphics Extends TGraphics
 	EndMethod
 	
 	Method Create:TD3D11Graphics(width,height,depth,hertz,flags)
-		
+
 		If _windowed Return Null 'Already have a window thats full screen
-		
+
 		'register wndclass
 		Local WNDCLASS:WNDCLASSW=New WNDCLASSW
 		WNDCLASS.hInstance=GetModuleHandleW( Null )
@@ -210,31 +209,31 @@ Type TD3D11Graphics Extends TGraphics
 
 		'Create the window
 		Local wstyle = WS_VISIBLE|WS_POPUP
-				
+
 		'centre window on screen
 		Local rect[4]
 		If Not depth
 			wstyle = WS_VISIBLE|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX
 
 			Local desktoprect[4]
-			
+
 			GetWindowRect( GetDesktopWindow() , desktoprect )
-			
+
 			rect[0]=desktopRect[2]/2-width/2		
 			rect[1]=desktopRect[3]/2-height/2
 			rect[2]=rect[0]+width
 			rect[3]=rect[1]+height
-			
+
 			AdjustWindowRect rect,wstyle,0
-			
+
 			_windowed = True
 		Else
 			rect[2] = width
 			rect[3] = height
-			
+
 			_windowed = False
 		EndIf
-		
+
 		Local hwnd=CreateWindowExW( 0,_wndClass,AppTitle,wstyle,rect[0],rect[1],rect[2]-rect[0],rect[3]-rect[1],0,0,GetModuleHandleW(Null),Null )
 		If Not hwnd Return Null
 
@@ -248,11 +247,11 @@ Type TD3D11Graphics Extends TGraphics
 			width=rect[2]-rect[0]
 			height=rect[3]-rect[1]
 		EndIf
-		
+
 		If Not _depth
 			CreateSwapChain(hwnd,width,height,depth,hertz,flags)
 		EndIf
-		
+
 		_hwnd=hwnd
 		_width=width
 		_height=height
@@ -265,30 +264,39 @@ Type TD3D11Graphics Extends TGraphics
 	
 	Method CreateSwapChain(hwnd,width,height,depth,hertz,flags)
 		Local modes:DXGI_MODE_DESC[] = _Displaymodes
-	
+
 		Local numerator = 0
 		Local denominator = 1
-
+		Local slo,scaling
+		
 		If depth
 			For Local i = 0 Until modes.length
 				If width = modes[i].Width
 					If height = modes[i].Height
-						numerator = modes[i].RefreshRate_Numerator
-						denominator = modes[i].RefreshRate_Denominator
-						_fullscreentarget = modes[i]
+						Local n = modes[i].RefreshRate_Numerator
+						Local d = modes[i].RefreshRate_Denominator
+						
+						If hertz = n/d
+							'scaling = modes[i].Scaling
+							numerator = modes[i].RefreshRate_Numerator
+							denominator = modes[i].RefreshRate_Denominator
+							'slo = modes[i].ScanlineOrdering
+							Exit
+						EndIf
 					EndIf
 				EndIf
 			Next
 		EndIf
-
+		
 		_sd = New DXGI_SWAP_CHAIN_DESC
-		_sd.BufferCount = 1+(depth>0)	'MSDN conflicting information on this parameter
+		_sd.BufferCount = 1	'MSDN conflicting information on this parameter
 		_sd.BufferDesc_Width = width
 		_sd.BufferDesc_Height = height
 		_sd.BufferDesc_Format = DXGI_FORMAT_R8G8B8A8_UNORM
 		_sd.BufferDesc_RefreshRate_Numerator = numerator
 		_sd.BufferDesc_RefreshRate_Denominator = denominator
-		_sd.BufferDesc_Scaling = 0
+		_sd.BufferDesc_Scaling = scaling
+		_sd.BufferDesc_ScanlineOrdering = slo
 		_sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT
 		_sd.OutputWindow = hwnd
 		_sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD
@@ -320,7 +328,7 @@ Type TD3D11Graphics Extends TGraphics
 		If _swapchain.GetBuffer(0,IID_ID3D11Texture2D,pBackBuffer)<0
 			Throw "Critical Error!~nCannot create backbuffer"
 		EndIf
-	
+		
 		If _d3d11dev.CreateRenderTargetView(pBackBuffer,Null,_rendertargetview)<0
 			Throw "Critical Error!~nCannot create RenderTargetView for rendering"
 		EndIf
@@ -376,22 +384,34 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 		If _Factory.EnumAdapters(0,_Adapter)<0
 			Throw "Error enumerating GPUs!"
 		EndIf
+
+		'Chceck for support of Dx10/11
+		If _Adapter.CheckInterfaceSupport(IID_ID3D11DEVICE,Null) < 0
+			If _Adapter.CheckInterfaceSupport(IID_ID3D10DEVICE1,Null)<0
+				If _Adapter.CheckInterfaceSupport(IID_ID3D10DEVICE,Null)<0
+					Return Null
+				EndIf
+			EndIf
+		EndIf
 		
 		'TODO: Each GPU may have multiple outputs?
 		If _Adapter.EnumOutputs(0,_Output)<0
 			Throw "Error enumeration graphics modes!"
 		EndIf
-		
+
 		Local nummodes
-		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,Null)<0
+		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED|DXGI_ENUM_MODES_SCALING,nummodes,Null)<0
 			Throw "Error getting number of graphics modes!"
 		EndIf
 		_Displaymodes = _Displaymodes[..nummodes]
 
 		Local modesptr:Byte Ptr=MemAlloc(SizeOf(DXGI_MODE_DESC)*nummodes)
 		
+		'TODO: 16bit modes
+		
+		'32bit modes		
 		If _Output.GetDisplaymodeList(DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_ENUM_MODES_INTERLACED,nummodes,modesptr)<0
-			Throw "Error filling display modes data!"			
+			Throw "Error filling 32bit display modes data!"			
 		EndIf
 		
 		_modes=New TGraphicsMode[nummodes]
@@ -432,7 +452,7 @@ Type TD3D11GraphicsDriver Extends TGraphicsDriver
 	
 	Method SetGraphics( g:TGraphics )
 		_graphics = TD3D11Graphics( g )
-		
+	
 		If _graphics
 			Local vp:D3D11_VIEWPORT = New D3D11_VIEWPORT
 			vp.Width = _graphics._width
@@ -468,6 +488,7 @@ Function D3D11GraphicsDriver:TD3D11GraphicsDriver()
 		_driver = New TD3D11GraphicsDriver.Create()
 		_doneD3D11 = True
 	EndIf
+
 	Return _driver
 EndFunction
 
