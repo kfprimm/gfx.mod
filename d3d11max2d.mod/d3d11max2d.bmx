@@ -562,7 +562,7 @@ Type TD3D11ImageFrame Extends TImageFrame
 		Local u1#=(sx+sw)*_uscale
 		Local v1#=(sy+sh)*_vscale
 		Local _verts#[16]
-		
+
 		_verts[0]=x0*_ix+y0*_iy+tx
 		_verts[1]=x0*_jx+y0*_jy+ty
 		_verts[2]=u0
@@ -612,7 +612,7 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 	'Screen rotation
 	Field tform_scr_rot#, tform_scr_zoom#
 	Field tform_scr_ix#,tform_scr_iy#,tform_scr_jx#,tform_scr_jy#
-	Field stored_scr_rot#,stored_scale_x,stored_scale_y
+	Field stored_scr_rot#,stored_scale_x#,stored_scale_y#
 	Field focus_x#,focus_y#
 	
 	Method AdjustScreenRotationScale(tx# Var, ty# Var)
@@ -627,7 +627,7 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 		tx :+ focus_x
 		ty :+ focus_y
 	EndMethod
-	
+
 	Method ResetScreenRotationScale()
 		SetRotation stored_scr_rot
 		SetScale stored_scale_x,stored_scale_y
@@ -811,15 +811,6 @@ Type TD3D11Max2DDriver Extends TMax2DDriver
 
 	Method SetViewport( x,y,width,height )
 		_d3d11devcon.RSSetScissorRects(1,[x,y,x+width,y+height])
-		
-		'Local vp:D3D11_VIEWPORT = New D3D11_VIEWPORT
-		'vp.Width = width
-		'vp.Height = height
-		'vp.MinDepth = 0.0
-		'vp.MaxDepth = 1.0
-		'vp.TopLeftX = x
-		'vp.TopLeftY = y
-		'_d3d11devcon.RSSetViewports(1,vp)
 	EndMethod
 
 	Method SetTransform( xx#,xy#,yx#,yy# )
@@ -1223,6 +1214,7 @@ EndType
 Function D3D11Max2DDriver:TD3D11Max2DDriver()
 	Global _done
 	If Not _done
+		_driver = Null
 		_driver=New TD3D11Max2DDriver.Create()
 		_done=True
 	EndIf
@@ -1232,9 +1224,6 @@ End Function
 Function VerifyD3D11Max2DDriver()
 	If GetGraphicsDriver().ToSTring()[0..9] <> "DirectX11" Throw "D3D11Max2DDriver() Required!"
 EndFunction
-
-Local driver:TD3D11Max2DDriver = D3D11Max2DDriver()
-
 
 '----------- Extra Max2D functionality -----------
 Function PlotPoints(points#[])
