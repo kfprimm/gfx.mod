@@ -29,10 +29,8 @@ Const D3DCOMPILE_EFFECT_CHILD_EFFECT              = ( 1 Shl 0)
 Const D3DCOMPILE_EFFECT_ALLOW_SLOW_OPS            = ( 1 Shl 1)
 
 Global _d3dcompiler = LoadLibraryA("d3dcompiler_43.dll")
-If Not _d3dcompiler
-	Notify "ERROR!~nCannot find 'd3dcompiler_43.dll'~nPlease install the latest version of DirectX11~nExiting.",True
-	End
-EndIf
+
+If Not _d3dcompiler Return
 
 Global D3DCreateBlob(Size,ppBlob:ID3DBlob Var)"win32" = GetProcAddress(_d3dcompiler,"D3DCreateBlob")
 Global D3DCompile(pSrcData:Byte Ptr,SrcDataSize,pSourceName:Byte Ptr,pDefines:Byte Ptr,pInclude:Byte Ptr,pEntryPoint:Byte Ptr,pTarget:Byte Ptr,Flags1,Flags2,ppCode:ID3DBlob Var,ppErrorMsgs:ID3DBlob Var)"win32" = GetProcAddress(_d3dcompiler,"D3DCompile")

@@ -1441,4 +1441,8 @@ Function SetScreenFocusD3D11(x#,y#)
 	VerifyD3D11Max2DDriver
 	_driver.SetFocus x,y
 End Function
+
+Local driver:TD3D11Max2DDriver = D3D11Max2DDriver()
+If driver SetGraphicsDriver driver
+
 ? 'WIN32
