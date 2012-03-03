@@ -743,7 +743,7 @@ Type ID3D11Device Extends IUnknown
 	Method CreateQuery(pQueryDesc:Byte Ptr,ppQuery:ID3D11Query Var)
 	Method CreatePredicate(pPredicateDesc:Byte Ptr,ppPredicate:ID3D11Predicate Var)
 	Method CreateCounter(pCounterDesc:Byte Ptr,ppCounter:ID3D11Counter Var)
-	Method CreateDefferedContext(ContextFlags,ppDefferedContext Var)
+	Method CreateDeferredContext(ContextFlags,ppDeferredContext:ID3D11DeviceContext Var)
 	Method OpenSharedResource(hResource,ReturnedInterface:Byte Ptr,ppResource:IUnknown Var)
 	Method CheckFormatSupport(Format,pFormatSupport:Int Var)
 	Method CheckMultisampleQualityLevels(Format,SampleCount,pNumQualityLevels:Int Var)
@@ -793,6 +793,11 @@ Global IID_ID3D11ClassLinkage[]			=[$ddf57cba,$46e49543,$07f22ba1,$ed7ffea0]
 Global IID_ID3D11CommandList[]			=[$a24bc4d1,$43f7769e,$ff981380,$e2186c56]
 Global IID_ID3D11DeviceContext[]		=[$c0bfa96c,$44fbe089,$f826af8e,$da906179]
 Global IID_ID3D11Device[]				=[$db6f6ddb,$4e88ac77,$9d815382,$40f1bbf9]
+
+'11 : db6f6ddb-ac77-4e88-8253-819d f9bb f140
+'10 : 9B7E4C00-342C-4106-A19F-4F27 04F6 89F0
+Global IID_ID3D10Device[]				=[$9b7e4c00,$4106342c,$274f9fa1,$f089f604]
+Global IID_ID3D10Device1[]				=[$9b7e4c8f,$4106342c,$274f9fa1,$f089f604]
 
 Global _d3d11 = LoadLibraryA("D3D11.dll")
 
